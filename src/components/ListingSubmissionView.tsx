@@ -12,9 +12,11 @@ import {
   Layers,
   Lock,
   Sparkles,
+  MapPin,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Listing } from '../types';
+import { Listing, LocalAddressFields } from '../types';
+import { LocalAddressSelector, LocalAddressState } from './LocalAddressSelector';
 
 interface ListingSubmissionViewProps {
   onSuccess: (newListing: Listing) => void;
@@ -63,6 +65,12 @@ export const ListingSubmissionView: React.FC<ListingSubmissionViewProps> = ({
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Mobiles & Gadgets');
   const [location, setLocation] = useState('Tura, Meghalaya');
+  const [locationState, setLocationState] = useState<LocalAddressState>({
+    state: 'Meghalaya',
+    district: 'West Garo Hills',
+    block: 'Rongram',
+    village: '',
+  });
   const [price, setPrice] = useState('');
   const [condition, setCondition] = useState('Used - Like New');
   const [description, setDescription] = useState('');
@@ -244,12 +252,17 @@ export const ListingSubmissionView: React.FC<ListingSubmissionViewProps> = ({
       parsedUrls = photoUrls;
     }
 
+    const finalLocationName = location.trim() || `${locationState.village ? locationState.village + ', ' : ''}${locationState.block}, ${locationState.district}`;
+
     const listingPayload: Listing = {
       id: `ad_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       title: title.trim(),
       category_name: category,
-      location_name: location.trim(),
-      state_name: location.split(',').pop()?.trim() || 'Meghalaya',
+      location_name: finalLocationName,
+      state_name: locationState.state || 'Meghalaya',
+      district: locationState.district,
+      block: locationState.block,
+      village: locationState.village,
       price: parseFloat(price),
       condition,
       description: description.trim(),
@@ -574,12 +587,12 @@ export const ListingSubmissionView: React.FC<ListingSubmissionViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-              City / Location *
+              Town / Market Center *
             </label>
             <input
               type="text"
               required
-              placeholder="e.g. Tura, Meghalaya"
+              placeholder="e.g. Tura Market, Hawakhana"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 font-bold placeholder:text-slate-400 placeholder:font-normal text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 focus:outline-none"
@@ -601,6 +614,22 @@ export const ListingSubmissionView: React.FC<ListingSubmissionViewProps> = ({
               <option value="Used - Fair" className="text-slate-900 font-semibold">Used - Fair Condition</option>
             </select>
           </div>
+        </div>
+
+        {/* Local Address Selector for Meghalaya */}
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+          <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-orange-600" /> Item Location Hierarchy (State, District, Block & Village) *
+          </h3>
+          <LocalAddressSelector
+            idPrefix="ad_post"
+            values={locationState}
+            onChange={(field, val) =>
+              setLocationState((prev) => ({ ...prev, [field]: val }))
+            }
+            theme="light"
+            required={true}
+          />
         </div>
 
         {/* Contact WhatsApp Protocol */}

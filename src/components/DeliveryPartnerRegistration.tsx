@@ -21,7 +21,8 @@ import {
   AlertTriangle,
   Lock,
 } from 'lucide-react';
-import { UserProfile, calculateDeliveryFare, formatPrice } from '../types';
+import { UserProfile, calculateDeliveryFare, formatPrice, LocalAddressFields } from '../types';
+import { LocalAddressSelector, LocalAddressState } from './LocalAddressSelector';
 
 interface DeliveryPartnerRegistrationProps {
   currentUser: UserProfile;
@@ -30,6 +31,10 @@ interface DeliveryPartnerRegistrationProps {
     phone: string;
     vehicleType: 'Bike' | 'Scooty' | 'Auto' | 'Commercial Auto';
     vehicleNumber: string;
+    state?: string;
+    district?: string;
+    block?: string;
+    village?: string;
     drivingLicenseNo?: string;
     drivingLicenseProofUrl?: string;
     vehicleRcNo?: string;
@@ -64,6 +69,14 @@ export const DeliveryPartnerRegistration: React.FC<DeliveryPartnerRegistrationPr
   );
   const [dlProofUrl, setDlProofUrl] = useState(currentUser?.driving_license_proof_url || '');
   const [vehicleRcNo, setVehicleRcNo] = useState(currentUser?.vehicle_rc_no || '');
+
+  // Local Location Details (State, District, Block, Village/Locality)
+  const [locationState, setLocationState] = useState<LocalAddressState>({
+    state: currentUser?.state || 'Meghalaya',
+    district: currentUser?.district || 'West Garo Hills',
+    block: currentUser?.block || 'Rongram',
+    village: currentUser?.village || '',
+  });
 
   // Payout Details State
   const [payoutUpiId, setPayoutUpiId] = useState(currentUser?.payout_upi_id || '');
@@ -170,6 +183,16 @@ export const DeliveryPartnerRegistration: React.FC<DeliveryPartnerRegistrationPr
       errs.vehicleNumber = 'Please enter a valid vehicle registration plate number (e.g., ML-08-A-4592)';
     }
 
+    if (!locationState.district || !locationState.district.trim()) {
+      errs.district = 'Please select your District';
+    }
+    if (!locationState.block || !locationState.block.trim()) {
+      errs.block = 'Please select or enter your Block';
+    }
+    if (!locationState.village || !locationState.village.trim()) {
+      errs.village = 'Please enter your Village / Locality name';
+    }
+
     if (!payoutUpiId.trim() || !payoutUpiId.includes('@')) {
       errs.payoutUpiId = 'Please enter a valid UPI ID for receiving delivery earnings (e.g., 9876543210@paytm)';
     }
@@ -189,6 +212,10 @@ export const DeliveryPartnerRegistration: React.FC<DeliveryPartnerRegistrationPr
         phone: phone.trim(),
         vehicleType,
         vehicleNumber: vehicleNumber.trim().toUpperCase(),
+        state: locationState.state,
+        district: locationState.district,
+        block: locationState.block,
+        village: locationState.village,
         drivingLicenseNo: drivingLicenseNo.trim().toUpperCase() || undefined,
         drivingLicenseProofUrl: dlProofUrl || undefined,
         vehicleRcNo: vehicleRcNo.trim().toUpperCase() || undefined,
@@ -502,6 +529,25 @@ export const DeliveryPartnerRegistration: React.FC<DeliveryPartnerRegistrationPr
                   </div>
                 )}
               </div>
+
+              {/* Driver Local Location (State, District, Block, Village) */}
+              <LocalAddressSelector
+                idPrefix="driver_reg"
+                values={locationState}
+                onChange={(field, val) => {
+                  setLocationState((prev) => ({ ...prev, [field]: val }));
+                  if (errors[field]) {
+                    setErrors((prev) => {
+                      const next = { ...prev };
+                      delete next[field];
+                      return next;
+                    });
+                  }
+                }}
+                errors={errors}
+                theme="light"
+                required={true}
+              />
 
               {/* PART 2: PAYOUT & EARNINGS DETAILS (PAISA PANE KA ACCOUNT) */}
               <div className="bg-emerald-50/70 border-2 border-emerald-200 rounded-3xl p-5 sm:p-6 space-y-4 pt-4">

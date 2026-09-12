@@ -14,11 +14,14 @@ import {
   Info,
   ArrowRight,
   Sparkles,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
 import {
   Listing,
   UserProfile,
   DeliveryOrder,
+  PolicyType,
   calculateDeliveryFare,
   isHeavyItemCategory,
   isVehicleCategory,
@@ -26,6 +29,10 @@ import {
   getListingPrimaryImage,
 } from '../types';
 import { UpiIntentButtons } from './UpiIntentButtons';
+import { PolicyModal } from './PolicyModal';
+import { LocalAddressSelector, LocalAddressState } from './LocalAddressSelector';
+import { formatFullAddress } from '../lib/meghalayaLocations';
+import { sendPushNotification, sendOrderAlertToPartner } from '../lib/notifications';
 
 interface CheckoutModalProps {
   listing: Listing;
@@ -58,10 +65,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [buyerName, setBuyerName] = useState(currentUser?.full_name || '');
   const [buyerPhone, setBuyerPhone] = useState(currentUser?.phone || '');
   const [buyerEmail, setBuyerEmail] = useState(currentUser?.email || '');
+  
+  // Local Location Fields (State, District, Block, Village/Locality)
+  const [locationState, setLocationState] = useState<LocalAddressState>({
+    state: currentUser?.state || 'Meghalaya',
+    district: currentUser?.district || 'West Garo Hills',
+    block: currentUser?.block || 'Rongram',
+    village: currentUser?.village || '',
+  });
+
   const [deliveryAddress, setDeliveryAddress] = useState(
     currentUser?.permanent_address || (currentUser?.city ? `${currentUser.city}, Meghalaya` : '')
   );
   const [landmarkNotes, setLandmarkNotes] = useState('');
+
+  // Mandatory Policy Acceptance Checkbox (CRITICAL: Default must be unchecked = false)
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [policyModalOpen, setPolicyModalOpen] = useState(false);
+  const [selectedPolicyType, setSelectedPolicyType] = useState<PolicyType>('terms_conditions');
 
   // Delivery estimation for home delivery
   const [weightKg, setWeightKg] = useState<number>(3);
@@ -123,10 +144,30 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   };
 
+  const handleOpenPolicy = (type: PolicyType) => {
+    setSelectedPolicyType(type);
+    setPolicyModalOpen(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
+    // 1. Verify Authenticated User
+    if (!currentUser || !currentUser.id) {
+      setErrorMsg('Please sign in with your account to place a prepaid order.');
+      return;
+    }
+
+    // 2. Verify Checkbox Consent is True
+    if (!termsAccepted) {
+      setErrorMsg(
+        'Payment karne ke liye Terms & Conditions aur Privacy Policy accept karna zaroori hai.'
+      );
+      return;
+    }
+
+    // 3. Verify Product Order Details
     if (!buyerName.trim()) {
       setErrorMsg('Please enter your full name.');
       return;
@@ -135,9 +176,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setErrorMsg('Please enter a valid 10-digit calling & WhatsApp phone number.');
       return;
     }
-    if (fulfillmentType === 'home_delivery' && !deliveryAddress.trim()) {
-      setErrorMsg('Please enter your complete doorstep delivery address.');
-      return;
+    if (fulfillmentType === 'home_delivery') {
+      if (!locationState.district || !locationState.district.trim()) {
+        setErrorMsg('Please select your District.');
+        return;
+      }
+      if (!locationState.block || !locationState.block.trim()) {
+        setErrorMsg('Please select or enter your C&RD Block.');
+        return;
+      }
+      if (!locationState.village || !locationState.village.trim()) {
+        setErrorMsg('Please enter your Village / Locality name.');
+        return;
+      }
+      if (!deliveryAddress.trim()) {
+        setErrorMsg('Please enter your complete doorstep delivery address (House / Landmark / Street).');
+        return;
+      }
     }
     if (!utrNumber.trim() || utrNumber.trim().length < 6) {
       setErrorMsg('Please enter the 12-digit UPI / Bank Transaction ID (UTR) number from your payment app.');
@@ -148,16 +203,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setIsSubmitting(true);
       const generatedOrderNo = `MLB-${Math.floor(100000 + Math.random() * 900000)}`;
 
+      const formattedDeliveryAddr =
+        fulfillmentType === 'home_delivery'
+          ? `${deliveryAddress.trim()}, Village/Locality: ${locationState.village.trim()}, Block: ${locationState.block.trim()}, District: ${locationState.district.trim()}, State: ${locationState.state.trim()}${
+              landmarkNotes ? ` (Landmark: ${landmarkNotes})` : ''
+            }`
+          : `SELF PICKUP: ${listing.location_name || 'Seller Shop/Location'}`;
+
+      // 4. Save required Terms & Conditions + Privacy Policy acceptance record
       const orderData: Omit<DeliveryOrder, 'id' | 'created_at'> = {
         order_number: generatedOrderNo,
         customer_name: buyerName.trim(),
         customer_phone: buyerPhone.trim(),
         customer_email: buyerEmail.trim(),
+        buyer_id: currentUser.id,
+        state: locationState.state,
+        district: locationState.district,
+        block: locationState.block,
+        village: locationState.village,
         pickup_address: listing.location_name || 'Seller Shop, Tura Bazaar',
-        delivery_address:
-          fulfillmentType === 'home_delivery'
-            ? `${deliveryAddress.trim()} ${landmarkNotes ? `(Landmark: ${landmarkNotes})` : ''}`
-            : `SELF PICKUP: ${listing.location_name || 'Seller Shop/Location'}`,
+        delivery_address: formattedDeliveryAddr,
         item_description: `${listing.title} [₹${formatPrice(productPrice)}]`,
         listing_id: listing.id,
         listing_title: listing.title,
@@ -180,6 +245,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         seller_name: listing.seller_name || 'Verified Vendor',
         seller_phone: listing.phone || listing.whatsapp || '9876543210',
         status: 'pending',
+        terms_accepted: true,
+        privacy_accepted: true,
+        policy_accepted_at: new Date().toISOString(),
       };
 
       const fullOrder: DeliveryOrder = {
@@ -188,12 +256,33 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         created_at: new Date().toISOString(),
       };
 
+      // 5. Initiate Order Placement / Handlers
       if (onOrderPlaced) {
         await onOrderPlaced(fullOrder);
       }
       if (onSubmitOrder) {
         await onSubmitOrder(orderData);
       }
+
+      // 6. Direct WebintoApp Push Notification dispatch for Instant Order Alert
+      try {
+        const partnerId = listing.seller_id;
+        const sellerRole = listing.category_name?.toLowerCase().includes('cab') || listing.category_name?.toLowerCase().includes('taxi')
+          ? 'driver'
+          : listing.category_name?.toLowerCase().includes('job') || listing.category_name?.toLowerCase().includes('service')
+          ? 'service_provider'
+          : 'seller';
+
+        await sendOrderAlertToPartner(partnerId, sellerRole, generatedOrderNo, {
+          listing_title: listing.title,
+          total_paid: totalAmountToPay,
+          customer_name: buyerName.trim(),
+          customer_phone: buyerPhone.trim(),
+        });
+      } catch (notifyErr) {
+        console.warn('Direct push notification dispatch non-blocking notice:', notifyErr);
+      }
+
       setCreatedOrderNumber(generatedOrderNo);
       setOrderSubmittedSuccess(true);
     } catch (err: any) {
@@ -443,22 +532,34 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
               {fulfillmentType === 'home_delivery' && !isHeavy && (
                 <div className="space-y-3 pt-1">
+                  {/* Local Location (State, District, Block, Village) Selector */}
+                  <LocalAddressSelector
+                    idPrefix="checkout_delivery"
+                    values={locationState}
+                    onChange={(field, val) =>
+                      setLocationState((prev) => ({ ...prev, [field]: val }))
+                    }
+                    theme="light"
+                    compact={true}
+                    required={true}
+                  />
+
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-[11px] font-bold text-slate-700">
-                        Doorstep Delivery Address *
+                        House No. / Street / Landmark Details *
                       </label>
                       {currentUser?.permanent_address && (
                         <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
                           <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                          Autofilled from Permanent Address
+                          Autofilled
                         </span>
                       )}
                     </div>
                     <textarea
                       required
                       rows={2}
-                      placeholder="House/Plot No., Street Name, Locality / Colony, Tura, Meghalaya"
+                      placeholder="House/Plot No., Street Name, Near Landmark / School / Market"
                       value={deliveryAddress}
                       onChange={(e) => setDeliveryAddress(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -671,26 +772,105 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
 
+            {/* MANDATORY TERMS & PRIVACY CONSENT CHECKBOX (UNCHECKED BY DEFAULT) */}
+            <div
+              id="buyer_checkout_policy_consent"
+              className={`p-4 rounded-2xl border-2 transition-all duration-200 space-y-3 ${
+                termsAccepted
+                  ? 'bg-orange-50/70 border-orange-300'
+                  : 'bg-slate-50 border-slate-300'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  id="checkout_terms_checkbox"
+                  type="checkbox"
+                  required
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-1 w-5 h-5 text-orange-600 rounded-lg border-2 border-slate-400 focus:ring-2 focus:ring-orange-500 cursor-pointer shrink-0 accent-orange-600"
+                />
+                <label
+                  htmlFor="checkout_terms_checkbox"
+                  className="text-xs text-slate-800 leading-relaxed select-none cursor-pointer space-y-2 block"
+                >
+                  <div className="font-semibold text-slate-900">
+                    "Main{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenPolicy('terms_conditions');
+                      }}
+                      className="text-orange-600 font-black hover:underline cursor-pointer inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-orange-100/70"
+                    >
+                      <span>Terms & Conditions</span>
+                      <ExternalLink className="w-3 h-3 inline" />
+                    </button>{' '}
+                    aur{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenPolicy('privacy_policy');
+                      }}
+                      className="text-orange-600 font-black hover:underline cursor-pointer inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-orange-100/70"
+                    >
+                      <span>Privacy Policy</span>
+                      <ExternalLink className="w-3 h-3 inline" />
+                    </button>{' '}
+                    ko padhkar aur samajhkar accept karta/karti hoon. Mujhe samajh hai ki agar mera prepaid product order 'Out for Delivery' ho chuka hai, toh order cancel karne par Delivery Charges ka refund nahi milega."
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 font-normal italic border-t border-slate-200/80 pt-1.5">
+                    "I have read and agree to the Terms & Conditions and Privacy Policy. I understand that if my prepaid product order has already been marked Out for Delivery, Delivery Charges will not be refunded if I cancel the order."
+                  </div>
+                </label>
+              </div>
+
+              {!termsAccepted && (
+                <div className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-xl border border-amber-200/80 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>
+                    Payment & Order submit karne ke liye upar diye gaye checkbox ko accept karna mandatory hai.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Error Message */}
+            {errorMsg && (
+              <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs flex items-center gap-2 animate-in fade-in duration-150">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="font-semibold">{errorMsg}</span>
+              </div>
+            )}
+
             {/* Modal Actions */}
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs sm:text-sm transition"
+                className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs sm:text-sm transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                id="checkout_pay_now_btn"
                 type="submit"
-                disabled={isSubmitting}
-                className="flex-[2] py-3.5 px-6 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-black rounded-2xl text-xs sm:text-sm transition shadow-lg flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
+                disabled={!termsAccepted || isSubmitting}
+                className={`flex-[2] py-3.5 px-6 font-black rounded-2xl text-xs sm:text-sm transition shadow-lg flex items-center justify-center gap-2 ${
+                  termsAccepted && !isSubmitting
+                    ? 'bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white cursor-pointer active:scale-98 shadow-orange-600/20'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 shadow-none'
+                }`}
               >
                 {isSubmitting ? (
                   <span>Submitting Order...</span>
                 ) : (
                   <>
-                    <span>Submit Order for Verification</span>
+                    <span>Submit & Pay ₹{formatPrice(totalAmountToPay)}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -699,6 +879,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </form>
         )}
       </div>
+
+      {/* Centralized Supabase Policy Viewer Modal */}
+      <PolicyModal
+        isOpen={policyModalOpen}
+        initialType={selectedPolicyType}
+        onClose={() => setPolicyModalOpen(false)}
+        showAcceptButton={!termsAccepted}
+        onAccept={() => setTermsAccepted(true)}
+      />
     </div>
   );
 };

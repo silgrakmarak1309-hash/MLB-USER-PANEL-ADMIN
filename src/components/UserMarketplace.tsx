@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ShoppingBag,
+  ShoppingCart,
   Search,
   Plus,
   Tag,
@@ -27,6 +28,7 @@ import {
 } from '../types';
 import { HeroBannerSection } from './HeroBannerSection';
 import { getCategoryIcon } from './BrandLogo';
+import { handleAddToCart as dbHandleAddToCart } from '../lib/cart';
 
 interface UserMarketplaceProps {
   listings: Listing[];
@@ -35,6 +37,7 @@ interface UserMarketplaceProps {
   onOpenSubmit: () => void;
   onOpenPro: () => void;
   onOrderNow?: (listing: Listing) => void;
+  onAddToCart?: (listingOrId: Listing | string) => Promise<any> | any;
 }
 
 const CATEGORIES = [
@@ -60,6 +63,7 @@ export const UserMarketplace: React.FC<UserMarketplaceProps> = ({
   onOpenSubmit,
   onOpenPro,
   onOrderNow,
+  onAddToCart,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -95,29 +99,20 @@ export const UserMarketplace: React.FC<UserMarketplaceProps> = ({
       {/* Responsive Hero Banner Ads Section */}
       <HeroBannerSection banners={banners} />
 
-      {/* Search and Category Filter Bar */}
-      <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search verified phones, vehicles, property, and services in your area..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm text-slate-900 placeholder:text-slate-400"
-          />
+      {/* Category Filter Pills (Directly below Slider) */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-xs border border-slate-200/90 flex items-center gap-2 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1.5 text-xs font-black text-slate-500 uppercase tracking-wider pl-1 pr-2 shrink-0 border-r border-slate-200">
+          <Filter className="w-3.5 h-3.5 text-orange-600" />
+          <span className="hidden sm:inline">Explore:</span>
         </div>
-
-        {/* Category Filter Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
-          <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl sm:rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 ${
                 selectedCategory === cat
-                  ? 'bg-orange-600 text-white shadow-xs'
+                  ? 'bg-orange-600 text-white shadow-sm ring-2 ring-orange-500/20'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
@@ -275,20 +270,54 @@ export const UserMarketplace: React.FC<UserMarketplaceProps> = ({
                       <span className="truncate">{item.location_name || 'Meghalaya'}</span>
                     </div>
 
-                    {/* Fast Buy Action */}
-                    {onOrderNow && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOrderNow(item);
-                        }}
-                        className="mt-2 w-full py-1.5 px-2 bg-orange-50 hover:bg-orange-600 text-orange-700 hover:text-white border border-orange-200 hover:border-orange-600 rounded-xl text-[11px] font-extrabold transition flex items-center justify-center gap-1"
-                      >
-                        <Zap className="w-3 h-3" />
-                        <span>Buy Now</span>
-                      </button>
-                    )}
+                    {/* Marketplace Actions: Add to Cart & Buy Now */}
+                    <div className="mt-2 grid grid-cols-2 gap-1.5 pt-1">
+                      {(onAddToCart || dbHandleAddToCart) && (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              console.log("Adding product to cart:", item.id);
+                              const handleAddToCart = onAddToCart || dbHandleAddToCart;
+                              const res = await handleAddToCart(item.id);
+                              
+                              // Agar response direct true hai ya res.success true hai
+                              if (res || (res as any)?.success) {
+                                alert(`${item.title} cart mein add ho gaya hai! 🎉`);
+                              } else {
+                                alert("Database se response nahi mila, lekin process chal gaya.");
+                              }
+                            } catch (err: any) {
+                              console.error("Button click error:", err);
+                              alert("Add to cart fail ho gaya: " + err.message);
+                            }
+                          }}
+                          className="w-full py-1.5 px-1.5 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-[10px] sm:text-[11px] transition flex items-center justify-center gap-1 active:scale-95 cursor-pointer shadow-xs"
+                          title="Add item to Cart"
+                        >
+                          <ShoppingCart className="w-3 h-3 text-white" />
+                          <span>Add to Cart</span>
+                        </button>
+                      )}
+
+                      {onOrderNow && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOrderNow(item);
+                          }}
+                          className={`w-full py-1.5 px-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-[10px] sm:text-[11px] font-black transition flex items-center justify-center gap-1 active:scale-95 shadow-xs ${
+                            !onAddToCart ? 'col-span-2' : ''
+                          }`}
+                          title="Instant Buy Now with 100% Prepaid"
+                        >
+                          <Zap className="w-3 h-3 text-amber-300" />
+                          <span>Buy Now</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

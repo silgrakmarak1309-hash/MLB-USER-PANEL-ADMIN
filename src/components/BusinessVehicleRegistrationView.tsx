@@ -29,7 +29,9 @@ import {
   VehicleRegistration,
   ServiceRegistration,
   UserProfile,
+  LocalAddressFields,
 } from '../types';
+import { LocalAddressSelector, LocalAddressState } from './LocalAddressSelector';
 
 interface BusinessVehicleRegistrationViewProps {
   currentUser: UserProfile;
@@ -111,6 +113,12 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
   const [ownerIdProofUrl, setOwnerIdProofUrl] = useState('');
   const [shopAddress, setShopAddress] = useState('');
   const [cityLocality, setCityLocality] = useState(currentUser?.city || 'Tura, Meghalaya');
+  const [shopLocation, setShopLocation] = useState<LocalAddressState>({
+    state: currentUser?.state || 'Meghalaya',
+    district: currentUser?.district || 'West Garo Hills',
+    block: currentUser?.block || 'Rongram',
+    village: currentUser?.village || '',
+  });
   const [userPhone, setUserPhone] = useState(currentUser?.phone || '');
   const [shopBannerUrl, setShopBannerUrl] = useState('');
   const [shopDescription, setShopDescription] = useState('');
@@ -127,6 +135,12 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
   const [driverName, setDriverName] = useState(currentUser?.full_name || '');
   const [driverPhone, setDriverPhone] = useState(currentUser?.phone || '');
   const [driverWhatsapp, setDriverWhatsapp] = useState(currentUser?.phone || '');
+  const [vehLocation, setVehLocation] = useState<LocalAddressState>({
+    state: currentUser?.state || 'Meghalaya',
+    district: currentUser?.district || 'West Garo Hills',
+    block: currentUser?.block || 'Rongram',
+    village: currentUser?.village || '',
+  });
   const [vehicleType, setVehicleType] = useState(VEHICLE_TYPES[0]);
   const [vehicleRegNo, setVehicleRegNo] = useState('');
   const [vehicleModel, setVehicleModel] = useState('');
@@ -149,6 +163,12 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
   const [srvFullName, setSrvFullName] = useState(currentUser?.full_name || '');
   const [srvPhone, setSrvPhone] = useState(currentUser?.phone || '');
   const [srvWhatsapp, setSrvWhatsapp] = useState(currentUser?.phone || '');
+  const [srvLocation, setSrvLocation] = useState<LocalAddressState>({
+    state: currentUser?.state || 'Meghalaya',
+    district: currentUser?.district || 'West Garo Hills',
+    block: currentUser?.block || 'Rongram',
+    village: currentUser?.village || '',
+  });
   const [srvCategory, setSrvCategory] = useState(SERVICE_CATEGORIES[0]);
   const [srvExperience, setSrvExperience] = useState(EXPERIENCE_OPTIONS[1]);
   const [srvIdProofUrl, setSrvIdProofUrl] = useState('');
@@ -227,6 +247,10 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
       user_email: currentUser?.email,
       shop_name: shopName,
       category: shopCategory,
+      state: shopLocation.state,
+      district: shopLocation.district,
+      block: shopLocation.block,
+      village: shopLocation.village,
       shop_id_proof_type: shopIdType,
       shop_id_no: shopIdNo,
       owner_name: ownerName,
@@ -236,7 +260,7 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
         ownerIdProofUrl ||
         'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
       shop_address: shopAddress,
-      city_locality: cityLocality,
+      city_locality: cityLocality || `${shopLocation.village}, ${shopLocation.block}, ${shopLocation.district}`,
       shop_banner_url:
         shopBannerUrl ||
         'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
@@ -271,6 +295,10 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
       driver_phone: driverPhone,
       driver_whatsapp: driverWhatsapp || driverPhone,
       driver_email: currentUser?.email,
+      state: vehLocation.state,
+      district: vehLocation.district,
+      block: vehLocation.block,
+      village: vehLocation.village,
       vehicle_type: vehicleType,
       vehicle_reg_no: vehicleRegNo.toUpperCase(),
       vehicle_model: vehicleModel,
@@ -312,12 +340,16 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
         whatsapp: srvWhatsapp.trim() || srvPhone.trim(),
         category: srvCategory,
         experience: srvExperience,
+        state: srvLocation.state,
+        district: srvLocation.district,
+        block: srvLocation.block,
+        village: srvLocation.village,
         identity_proof_url:
           srvIdProofUrl ||
           'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=800&auto=format&fit=crop&q=80',
         aadhaar_or_voter_no: srvIdNo.trim() || undefined,
         service_address: srvAddress.trim() || undefined,
-        city_locality: srvLocality.trim() || 'Tura, Meghalaya',
+        city_locality: srvLocality.trim() || `${srvLocation.village}, ${srvLocation.block}, ${srvLocation.district}`,
         payout_upi_id: srvPayoutUpi.trim() || undefined,
         bio_skills: srvBio.trim() || undefined,
         hourly_or_daily_rate: srvRate.trim() || undefined,
@@ -391,25 +423,49 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
         </div>
       </div>
 
-      {/* 100% PREPAID PROTOCOL SECURITY ALERT (CRISP WHITE TEXT CONTRAST) */}
-      <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-orange-500 border border-orange-400/60 rounded-3xl p-5 sm:p-6 shadow-lg shadow-orange-950/15 flex items-start gap-4 text-white">
-        <div className="w-10 h-10 rounded-2xl bg-white/20 text-white border border-white/30 flex items-center justify-center shrink-0 shadow-xs">
-          <ShieldCheck className="w-6 h-6 text-white" />
-        </div>
-        <div className="space-y-1.5 flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm sm:text-base font-black text-white tracking-tight" style={{ color: '#FFFFFF' }}>
-              100% Prepaid Protocol Security Alert
-            </h3>
-            <span className="bg-white text-orange-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
-              No COD
-            </span>
+      {/* DYNAMIC SECURITY & COMMISSION BANNER BASED ON ACTIVE SCREEN TAB */}
+      {activeTab !== 'my_status' && (
+        <div
+          id="registration_dynamic_banner"
+          className={`border rounded-3xl p-5 sm:p-6 shadow-xl flex items-start gap-4 text-white transition-all duration-300 ${
+            activeTab === 'vehicle'
+              ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 border-red-400/60 shadow-red-950/20'
+              : activeTab === 'services_jobs'
+              ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 border-red-400/60 shadow-red-950/20'
+              : 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 border-red-400/60 shadow-red-950/20'
+          }`}
+        >
+          <div className="w-10 h-10 rounded-2xl bg-white/20 text-white border border-white/30 flex items-center justify-center shrink-0 shadow-xs">
+            <ShieldCheck className="w-6 h-6 text-white" />
           </div>
-          <p className="text-xs sm:text-sm font-semibold text-white leading-relaxed" style={{ color: '#FFFFFF' }}>
-            "Yeh ek 100% Prepaid App hai. Customer se delivery ke waqt koi cash ya online paisa alag se nahi lena hai. Aapka delivery charge order complete hote hi aapke app wallet / UPI payout mein aa jayega."
-          </p>
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm sm:text-base font-black text-white tracking-tight" style={{ color: '#FFFFFF' }}>
+                {activeTab === 'vehicle'
+                  ? 'Cab, Taxi & Fleet Policy • 0% Commission'
+                  : activeTab === 'services_jobs'
+                  ? 'Local Services Policy • 0% Commission'
+                  : '100% Prepaid Protocol Security Alert'}
+              </h3>
+              <span className="bg-white text-red-950 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
+                {activeTab === 'vehicle'
+                  ? '100% Driver Fare'
+                  : activeTab === 'services_jobs'
+                  ? '100% Direct Pay'
+                  : 'No Cash On Delivery'}
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm font-semibold text-white leading-relaxed" style={{ color: '#FFFFFF' }}>
+              {activeTab === 'vehicle' &&
+                'Apna KM khud check karein aur bhada customer se tay karein. Ride khatam hone par direct Cash ya apne UPI par paisa lelein. Pura paisa 100% driver ka hai! App koi commission nahi lega.'}
+              {activeTab === 'shop' &&
+                'Yeh ek 100% Prepaid App hai. Customer se delivery ke waqt koi bhi cash ya alag se paisa nahi lena hai. Aapka shop order complete hote hi aapka payment aapke app wallet / UPI payout mein aa jayega.'}
+              {activeTab === 'services_jobs' &&
+                'Aap apna visiting charge aur kaam ka paisa khud customer se baat karke tay karenge. Kaam poora hone par customer se direct Cash ya apne personal UPI ID (QR Code) par paisa lelein. Pura paisa 100% aapka hai! App koi commission nahi lega.'}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Toast alert */}
       {submittedSuccess && (
@@ -559,12 +615,12 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
               {/* City / Locality */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-                  Locality / Town *
+                  Market / Town Center *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Tura Supermarket Complex, West Garo Hills"
+                  placeholder="e.g. Tura Supermarket Complex, Hawakhana"
                   value={cityLocality}
                   onChange={(e) => setCityLocality(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -572,15 +628,31 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
               </div>
             </div>
 
+            {/* Shop Local Location (State, District, Block, Village) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-orange-600" /> Shop Location Hierarchy (Meghalaya District & Block) *
+              </h3>
+              <LocalAddressSelector
+                idPrefix="shop_reg"
+                values={shopLocation}
+                onChange={(field, val) =>
+                  setShopLocation((prev) => ({ ...prev, [field]: val }))
+                }
+                theme="light"
+                required={true}
+              />
+            </div>
+
             {/* Shop Address */}
             <div>
               <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-                Full Physical Address of Shop *
+                Full Physical Address / Building / Street of Shop *
               </label>
               <textarea
                 rows={2}
                 required
-                placeholder="Shop No., Complex Name, Street, Landmark, Pincode"
+                placeholder="Shop No., Complex / Building Name, Street, Landmark"
                 value={shopAddress}
                 onChange={(e) => setShopAddress(e.target.value)}
                 className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -866,23 +938,39 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
               </div>
             </div>
 
+            {/* Vehicle Base Local Location (State, District, Block, Village) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-blue-600" /> Vehicle / Driver Home Base (Meghalaya District & Block) *
+              </h3>
+              <LocalAddressSelector
+                idPrefix="vehicle_reg"
+                values={vehLocation}
+                onChange={(field, val) =>
+                  setVehLocation((prev) => ({ ...prev, [field]: val }))
+                }
+                theme="light"
+                required={true}
+              />
+            </div>
+
             {/* PART 2: VEHICLE DRIVER PAYOUT DETAILS */}
             <div className="bg-blue-50/60 border-2 border-blue-200 rounded-3xl p-5 sm:p-6 space-y-4">
               <div className="flex items-center gap-2 border-b border-blue-200 pb-2">
                 <CreditCard className="w-5 h-5 text-blue-600 shrink-0" />
                 <div>
                   <h3 className="text-sm font-black text-blue-950">
-                    Driver Payout & Settlement Account (Paisa Pane Ka Account) *
+                    Driver Payout & Settlement Account (Direct Payment) *
                   </h3>
-                  <p className="text-[11px] text-blue-800">
-                    Online customer bookings & trip fare settlements is account mein aayenge.
+                  <p className="text-[11px] font-semibold text-blue-900">
+                    Apna personal UPI ID enter karein taaki customer aapko direct pay kar sake.
                   </p>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-800 uppercase mb-1.5 flex items-center gap-1.5">
-                  <QrCode className="w-3.5 h-3.5 text-blue-600" /> Driver Payout UPI ID * (Mandatory)
+                  <QrCode className="w-3.5 h-3.5 text-blue-600" /> Driver Personal UPI ID * (Direct Customer Payment)
                 </label>
                 <input
                   type="text"
@@ -892,6 +980,9 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
                   onChange={(e) => setVehPayoutUpi(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-mono font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:border-blue-500"
                 />
+                <p className="text-[11px] text-slate-600 font-medium mt-1">
+                  💡 Apna personal UPI ID enter karein taaki customer aapko direct pay kar sake.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1113,7 +1204,7 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
               {/* City / Locality */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-                  City / Service Locality *
+                  Town / Service Hub *
                 </label>
                 <input
                   type="text"
@@ -1127,11 +1218,11 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
               {/* Service Address */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-                  Workshop / Residence Address
+                  Workshop / Residence Address Details
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Ringrey Bridge, Tura Bazar"
+                  placeholder="e.g. Near Ringrey Bridge, Main Road"
                   value={srvAddress}
                   onChange={(e) => setSrvAddress(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
@@ -1155,7 +1246,7 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
               {/* Payout UPI */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-                  Payout UPI ID (For Direct Payments)
+                  Personal Payout UPI ID (For Direct Payments)
                 </label>
                 <input
                   type="text"
@@ -1164,7 +1255,26 @@ export const BusinessVehicleRegistrationView: React.FC<BusinessVehicleRegistrati
                   onChange={(e) => setSrvPayoutUpi(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
                 />
+                <p className="text-[11px] text-slate-600 font-medium mt-1">
+                  💡 Apna personal UPI ID enter karein taaki customer aapko direct pay kar sake.
+                </p>
               </div>
+            </div>
+
+            {/* Service Provider Local Location (State, District, Block, Village) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-purple-600" /> Service Location Hierarchy (Meghalaya District & Block) *
+              </h3>
+              <LocalAddressSelector
+                idPrefix="service_reg"
+                values={srvLocation}
+                onChange={(field, val) =>
+                  setSrvLocation((prev) => ({ ...prev, [field]: val }))
+                }
+                theme="light"
+                required={true}
+              />
             </div>
 
             {/* Bio / Skills Description */}

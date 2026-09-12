@@ -21,13 +21,16 @@ import {
   Package,
   Zap,
   Store,
+  ShoppingCart,
 } from 'lucide-react';
 import { Listing, formatPrice, getCategoryFulfillmentBadge, getListingImages } from '../types';
+import { handleAddToCart as dbHandleAddToCart } from '../lib/cart';
 
 interface ListingDetailModalProps {
   listing: Listing | null;
   onClose: () => void;
   onOrderNow?: (listing: Listing) => void;
+  onAddToCart?: (listingOrId: Listing | string) => Promise<any> | any;
   onModerate?: (id: string, status: 'active' | 'rejected', isFeatured?: boolean, isPro?: boolean) => void;
   isAdmin?: boolean;
 }
@@ -45,6 +48,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   listing,
   onClose,
   onOrderNow,
+  onAddToCart,
   onModerate,
   isAdmin = false,
 }) => {
@@ -338,40 +342,71 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
           )}
         </div>
 
-        {/* Action Sheet at the bottom: Buy Now + WhatsApp + Call */}
+        {/* Action Sheet at the bottom: Add to Cart + Buy Now + WhatsApp + Call */}
         <div className="p-3.5 sm:p-4 border-t border-slate-200 bg-slate-50/95 shrink-0 space-y-2.5">
-          {/* Primary Action: 100% Prepaid Order Button */}
-          {onOrderNow && (
-            <button
-              onClick={() => {
-                onClose();
-                onOrderNow(listing);
-              }}
-              className="w-full py-3 px-4 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-2xl text-center text-sm transition shadow-md flex items-center justify-center gap-2 active:scale-98"
-            >
-              {fulfillmentBadge.type === 'self_pickup' ? (
-                <>
-                  <Store className="w-4 h-4 text-white" />
-                  <span>Order with Self-Pickup (Advance Pay)</span>
-                </>
-              ) : fulfillmentBadge.type === 'ride' ? (
-                <>
-                  <Car className="w-4 h-4 text-white" />
-                  <span>Book Ride / Request Driver</span>
-                </>
-              ) : fulfillmentBadge.type === 'service' ? (
-                <>
-                  <Wrench className="w-4 h-4 text-white" />
-                  <span>Request Onsite Service Visit</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4 text-amber-300" />
-                  <span>Buy Now with 100% Prepaid Delivery</span>
-                </>
-              )}
-            </button>
-          )}
+          {/* Main Action Buttons Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {(onAddToCart || dbHandleAddToCart) && (
+              <button
+                onClick={async () => {
+                  try {
+                    console.log("Adding product to cart:", listing.id);
+                    const handleAddToCart = onAddToCart || dbHandleAddToCart;
+                    const res = await handleAddToCart(listing.id);
+                    onClose();
+                    
+                    // Agar response direct true hai ya res.success true hai
+                    if (res || (res as any)?.success) {
+                      alert(`${listing.title} cart mein add ho gaya hai! 🎉`);
+                    } else {
+                      alert("Database se response nahi mila, lekin process chal gaya.");
+                    }
+                  } catch (err: any) {
+                    console.error("Button click error:", err);
+                    alert("Add to cart fail ho gaya: " + err.message);
+                  }
+                }}
+                className="w-full py-3 px-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl text-center text-xs sm:text-sm transition shadow-sm flex items-center justify-center gap-2 active:scale-98 cursor-pointer"
+              >
+                <ShoppingCart className="w-4 h-4 text-orange-400" />
+                <span>Add to Cart</span>
+              </button>
+            )}
+
+            {onOrderNow && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOrderNow(listing);
+                }}
+                className={`w-full py-3 px-3 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-2xl text-center text-xs sm:text-sm transition shadow-md flex items-center justify-center gap-2 active:scale-98 cursor-pointer ${
+                  !onAddToCart ? 'sm:col-span-2' : ''
+                }`}
+              >
+                {fulfillmentBadge.type === 'self_pickup' ? (
+                  <>
+                    <Store className="w-4 h-4 text-white" />
+                    <span>Order (Self-Pickup)</span>
+                  </>
+                ) : fulfillmentBadge.type === 'ride' ? (
+                  <>
+                    <Car className="w-4 h-4 text-white" />
+                    <span>Book Ride / Driver</span>
+                  </>
+                ) : fulfillmentBadge.type === 'service' ? (
+                  <>
+                    <Wrench className="w-4 h-4 text-white" />
+                    <span>Request Service Visit</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 text-amber-300" />
+                    <span>Buy Now (Prepaid)</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             {/* WhatsApp Action Button */}

@@ -175,6 +175,43 @@ $$;
 GRANT EXECUTE ON FUNCTION public.check_and_expire_user_plans() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.check_and_expire_user_plans() TO service_role;
 
+-- Database RPC function to fetch users whose PRO partner plans expire within the next 3 days
+CREATE OR REPLACE FUNCTION public.check_expiring_plans()
+RETURNS TABLE(
+    user_id UUID,
+    full_name TEXT,
+    phone TEXT,
+    email TEXT,
+    role TEXT,
+    plan_expiry_date TIMESTAMPTZ,
+    days_left INT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        p.id AS user_id,
+        p.full_name,
+        p.phone,
+        p.email,
+        p.role,
+        p.plan_expiry_date,
+        CEIL(EXTRACT(EPOCH FROM (p.plan_expiry_date - NOW())) / 86400)::INT AS days_left
+    FROM public.profiles p
+    WHERE 
+        p.account_status = 'active'
+        AND p.plan_expiry_date IS NOT NULL
+        AND p.plan_expiry_date > NOW()
+        AND p.plan_expiry_date <= (NOW() + INTERVAL '3 days');
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.check_expiring_plans() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.check_expiring_plans() TO service_role;
+
 -- Schedule automatic recurring cron job with pg_cron (runs every hour at minute 0)
 DO $$
 BEGIN

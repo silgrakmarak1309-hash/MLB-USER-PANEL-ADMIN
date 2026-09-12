@@ -1,4 +1,11 @@
-export interface Listing {
+export interface LocalAddressFields {
+  state?: string;
+  district?: string;
+  block?: string;
+  village?: string;
+}
+
+export interface Listing extends LocalAddressFields {
   id: string;
   title: string;
   category_id?: string;
@@ -24,7 +31,7 @@ export interface Listing {
   created_at?: string | number;
 }
 
-export interface UserProfile {
+export interface UserProfile extends LocalAddressFields {
   id: string;
   full_name?: string;
   email: string;
@@ -90,7 +97,7 @@ export interface Delivery {
   updated_at: string;
 }
 
-export interface DeliveryOrder {
+export interface DeliveryOrder extends LocalAddressFields {
   id: string;
   order_number: string;
   customer_name: string;
@@ -147,6 +154,23 @@ export interface DeliveryOrder {
   accepted_at?: string;
   delivered_at?: string;
   rejection_reason?: string;
+  terms_accepted?: boolean;
+  privacy_accepted?: boolean;
+  policy_accepted_at?: string;
+  cancelled_at?: string;
+  cancellation_reason?: string;
+  refund_amount?: number;
+  delivery_charge_refund?: number;
+  cancelled_by?: 'buyer' | 'seller' | 'admin' | string;
+}
+
+export type PolicyType = 'terms_conditions' | 'privacy_policy';
+
+export interface AppPolicy {
+  id: string;
+  policy_type: PolicyType;
+  content: string;
+  updated_at?: string;
 }
 
 export interface PayoutRequest {
@@ -436,7 +460,7 @@ export interface ProPlan {
   features: string[];
 }
 
-export interface ShopRegistration {
+export interface ShopRegistration extends LocalAddressFields {
   id: string;
   user_id: string;
   user_name: string;
@@ -466,7 +490,7 @@ export interface ShopRegistration {
   verified_at?: string;
 }
 
-export interface VehicleRegistration {
+export interface VehicleRegistration extends LocalAddressFields {
   id: string;
   user_id: string;
   driver_name: string;
@@ -495,7 +519,7 @@ export interface VehicleRegistration {
   verified_at?: string;
 }
 
-export interface ServiceRegistration {
+export interface ServiceRegistration extends LocalAddressFields {
   id: string;
   user_id: string;
   user_name?: string;
@@ -581,6 +605,17 @@ export function getWhatsAppUrl(phone: string, text: string): string {
 }
 
 export const MASTER_ADMIN_EMAIL = 'silgrakmarak1309@gmail.com';
+
+export interface CartItem {
+  id: string;
+  user_id: string;
+  listing_id: string;
+  quantity: number;
+  created_at?: string;
+  updated_at?: string;
+  // Joined or enriched listing data
+  listing?: Listing;
+}
 
 export function isMasterAdmin(user?: UserProfile | null): boolean {
   if (!user || !user.email) return false;

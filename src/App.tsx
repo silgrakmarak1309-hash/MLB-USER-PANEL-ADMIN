@@ -22,6 +22,9 @@ import {
   LogOut,
   Star,
   ShieldCheck,
+  ShoppingCart,
+  Check,
+  Search,
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { BrandLogo, BrandIcon } from './components/BrandLogo';
@@ -36,6 +39,7 @@ import {
   DeliveryOrder,
   BannerAd,
   PayoutRequest,
+  CartItem,
   isMasterAdmin,
 } from './types';
 import { AdminControlRoom } from './components/AdminControlRoom';
@@ -50,14 +54,24 @@ import { BusinessVehicleRegistrationView } from './components/BusinessVehicleReg
 import { DeliveryPartnerRegistration } from './components/DeliveryPartnerRegistration';
 import { DeliveryPartnerDashboard } from './components/DeliveryPartnerDashboard';
 import { BuyerOrdersManagement } from './components/BuyerOrdersManagement';
+import { CartScreen } from './components/CartScreen';
 import { GoogleAuthModal } from './components/GoogleAuthModal';
 import { LoginScreen } from './components/LoginScreen';
 import { CheckoutModal } from './components/CheckoutModal';
+import { PolicyModal } from './components/PolicyModal';
+import { SearchModal } from './components/SearchModal';
+import { PolicyType } from './types';
+import { fetchUserCart, addToCart, clearUserCart } from './lib/cart';
+import {
+  sendPushNotification,
+  sendOrderAlertToPartner,
+  checkAndSend3DaysPlanExpiryAlerts,
+} from './lib/notifications';
 
 // Resilient initial data for fast load & offline fallback
 const INITIAL_LISTINGS: Listing[] = [
   {
-    id: 'ad_101',
+    id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380101',
     title: 'Apple iPhone 14 Pro Max (128GB Deep Purple)',
     category_name: 'Mobiles & Gadgets',
     location_name: 'Tura, Meghalaya',
@@ -78,7 +92,7 @@ const INITIAL_LISTINGS: Listing[] = [
     created_at: new Date(Date.now() - 86400000).toISOString(),
   },
   {
-    id: 'ad_102',
+    id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380102',
     title: 'Royal Enfield Hunter 350 Dapper Ash (2023)',
     category_name: 'Vehicles',
     location_name: 'Shillong, Meghalaya',
@@ -99,7 +113,7 @@ const INITIAL_LISTINGS: Listing[] = [
     created_at: new Date(Date.now() - 3600000).toISOString(),
   },
   {
-    id: 'ad_103',
+    id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380103',
     title: 'Commercial Land / Plot 5000 Sqft near Main Road',
     category_name: 'Property & Real Estate',
     location_name: 'Williamnagar, Meghalaya',
@@ -120,7 +134,7 @@ const INITIAL_LISTINGS: Listing[] = [
     created_at: new Date(Date.now() - 7200000).toISOString(),
   },
   {
-    id: 'ad_104',
+    id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380104',
     title: 'Tura to Guwahati & Shillong 24x7 AC Cab Service',
     category_name: 'Local Cab & Taxi',
     location_name: 'Tura, Meghalaya',
@@ -141,7 +155,7 @@ const INITIAL_LISTINGS: Listing[] = [
     created_at: new Date(Date.now() - 14400000).toISOString(),
   },
   {
-    id: 'ad_105',
+    id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380105',
     title: 'Luxury Force Traveler 17-Seater for Tour & Wedding Trips',
     category_name: 'Travelers & Tour',
     location_name: 'Shillong, Meghalaya',
@@ -162,7 +176,7 @@ const INITIAL_LISTINGS: Listing[] = [
     created_at: new Date(Date.now() - 28800000).toISOString(),
   },
   {
-    id: 'ad_106',
+    id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380106',
     title: 'Daily Auto Rickshaw & Local Bike Parcel / Ride Service',
     category_name: 'Bike & Auto Rickshaw',
     location_name: 'Tura Market, Meghalaya',
@@ -183,7 +197,7 @@ const INITIAL_LISTINGS: Listing[] = [
     created_at: new Date(Date.now() - 43200000).toISOString(),
   },
   {
-    id: 'ad_107',
+    id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380107',
     title: 'Marak Traders Retail & Wholesale Grocery Store',
     category_name: 'Shops',
     location_name: 'Supermarket, Tura',
@@ -204,7 +218,7 @@ const INITIAL_LISTINGS: Listing[] = [
     created_at: new Date(Date.now() - 18000000).toISOString(),
   },
   {
-    id: 'ad_108',
+    id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380108',
     title: 'Certified Home Electrician, Inverter & Plumbing Service',
     category_name: 'Local Jobs & Services',
     location_name: 'Hawakhana, Tura',
@@ -633,6 +647,7 @@ type AppRoute = 'user' | 'admin' | 'delivery_register' | 'delivery_dashboard';
 
 type UserNavTab =
   | 'marketplace'
+  | 'cart'
   | 'buyer_orders'
   | 'submit'
   | 'registrations'
@@ -768,6 +783,116 @@ export function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authTargetFeature, setAuthTargetFeature] = useState('this feature');
   const [pendingAuthAction, setPendingAuthAction] = useState<(() => void) | null>(null);
+
+  // Policy Modal state for Terms & Conditions and Privacy Policy viewer
+  const [appPolicyModalOpen, setAppPolicyModalOpen] = useState(false);
+  const [appPolicyModalType, setAppPolicyModalType] = useState<PolicyType>('terms_conditions');
+
+  // Search Modal state for Header Magnifying Glass search
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+
+  // Global Keyboard Shortcut for Search (Ctrl+K or Cmd+K)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchModalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  // Cart States & Live Count
+  const [cartCount, setCartCount] = useState<number>(0);
+  const [cartToast, setCartToast] = useState<{ message: string; visible: boolean }>({
+    message: '',
+    visible: false,
+  });
+
+  // Sync Cart Count on user change
+  useEffect(() => {
+    if (currentUser?.id) {
+      fetchUserCart(currentUser.id).then((items) => {
+        const total = items.reduce((acc, i) => acc + (Number(i.quantity) || 1), 0);
+        setCartCount(total);
+      });
+    } else {
+      setCartCount(0);
+    }
+  }, [currentUser?.id]);
+
+  const handleAddToCart = async (listingOrId: Listing | string) => {
+    const listingId = typeof listingOrId === 'string' ? listingOrId : listingOrId.id;
+    const listingTitle =
+      typeof listingOrId === 'string'
+        ? listings.find((l) => l.id === listingOrId)?.title || 'Item'
+        : listingOrId.title;
+
+    if (!currentUser) {
+      handleRequireAuth('Add to Cart', () => handleAddToCart(listingOrId));
+      return { success: false, error: 'Auth required' };
+    }
+
+    try {
+      const res = await addToCart(currentUser.id, listingId, 1);
+      if (res.success) {
+        setCartCount((prev) => prev + 1);
+        setCartToast({
+          message: `"${listingTitle}" added to cart!`,
+          visible: true,
+        });
+        setTimeout(() => {
+          setCartToast((prev) => ({ ...prev, visible: false }));
+        }, 3000);
+        return res;
+      } else {
+        alert(res.error || 'Failed to add item to cart.');
+        return res;
+      }
+    } catch (err: any) {
+      console.error('Error adding to cart:', err);
+      throw err;
+    }
+  };
+
+  const handleProceedFromCartToCheckout = (
+    cartItems: CartItem[],
+    totalAmount: number,
+    deliveryCharge: number
+  ) => {
+    if (cartItems.length === 0) return;
+    const firstItem = cartItems[0]?.listing;
+    if (firstItem) {
+      const summaryListing: Listing = {
+        ...firstItem,
+        id: cartItems.length === 1 ? firstItem.id : `cart_order_${Date.now()}`,
+        title:
+          cartItems.length === 1
+            ? firstItem.title
+            : `Cart Order (${cartItems.length} items): ${cartItems
+                .map((i) => i.listing?.title || 'Item')
+                .join(', ')
+                .slice(0, 65)}...`,
+        price: cartItems.reduce(
+          (sum, i) => sum + (Number(i.listing?.price) || 0) * (Number(i.quantity) || 1),
+          0
+        ),
+        description: `Consolidated Hyperlocal Cart Order (${cartItems.length} Items):\n${cartItems
+          .map(
+            (i, idx) =>
+              `${idx + 1}. ${i.listing?.title || 'Product'} (x${i.quantity}) - ₹${(Number(i.listing?.price) || 0) * (Number(i.quantity) || 1)}`
+          )
+          .join('\n')}`,
+      };
+      setSelectedListingForCheckout(summaryListing);
+    }
+  };
+
+  const openAppPolicy = (type: PolicyType) => {
+    setAppPolicyModalType(type);
+    setAppPolicyModalOpen(true);
+  };
 
   // Sync Supabase Auth session on return from OAuth (Vercel / live deployment)
   useEffect(() => {
@@ -997,6 +1122,10 @@ export function App() {
 
   useEffect(() => {
     fetchData();
+    // Direct Frontend 3-Days Plan Expiry Scan & Automated Alert Dispatch
+    checkAndSend3DaysPlanExpiryAlerts().catch((err) => {
+      console.warn('Direct plan expiry background check non-blocking notice:', err);
+    });
   }, [fetchData]);
 
   // Admin Listing Moderation Action
@@ -1384,6 +1513,10 @@ export function App() {
           p.id === targetUserId
             ? {
                 ...p,
+                state: data.state || p.state,
+                district: data.district || p.district,
+                block: data.block || p.block,
+                village: data.village || p.village,
                 shop_name: data.shop_name,
                 shop_category: data.category,
                 shop_address: data.shop_address,
@@ -1413,6 +1546,10 @@ export function App() {
           await supabase
             .from('profiles')
             .update({
+              state: data.state,
+              district: data.district,
+              block: data.block,
+              village: data.village,
               shop_name: data.shop_name,
               shop_category: data.category,
               shop_address: data.shop_address,
@@ -1460,6 +1597,10 @@ export function App() {
           p.id === targetUserId
             ? {
                 ...p,
+                state: data.state || p.state,
+                district: data.district || p.district,
+                block: data.block || p.block,
+                village: data.village || p.village,
                 vehicle_type: data.vehicle_type,
                 vehicle_number: data.vehicle_reg_no,
                 driving_license: data.driving_license_no,
@@ -1486,6 +1627,10 @@ export function App() {
           await supabase
             .from('profiles')
             .update({
+              state: data.state,
+              district: data.district,
+              block: data.block,
+              village: data.village,
               vehicle_type: data.vehicle_type,
               vehicle_number: data.vehicle_reg_no,
               driving_license: data.driving_license_no,
@@ -1758,6 +1903,10 @@ export function App() {
     phone: string;
     vehicleType: 'Bike' | 'Scooty' | 'Auto' | 'Commercial Auto';
     vehicleNumber: string;
+    state?: string;
+    district?: string;
+    block?: string;
+    village?: string;
     drivingLicenseNo?: string;
     drivingLicenseProofUrl?: string;
     vehicleRcNo?: string;
@@ -1774,6 +1923,10 @@ export function App() {
               ...p,
               full_name: data.fullName,
               phone: data.phone,
+              state: data.state || p.state,
+              district: data.district || p.district,
+              block: data.block || p.block,
+              village: data.village || p.village,
               is_delivery_partner: true,
               vehicle_type: data.vehicleType,
               vehicle_number: data.vehicleNumber,
@@ -1798,6 +1951,10 @@ export function App() {
         ...currentUser,
         full_name: data.fullName,
         phone: data.phone,
+        state: data.state || currentUser.state,
+        district: data.district || currentUser.district,
+        block: data.block || currentUser.block,
+        village: data.village || currentUser.village,
         is_delivery_partner: true,
         vehicle_type: data.vehicleType,
         vehicle_number: data.vehicleNumber,
@@ -1825,6 +1982,10 @@ export function App() {
           .update({
             full_name: data.fullName,
             phone: data.phone,
+            state: data.state,
+            district: data.district,
+            block: data.block,
+            village: data.village,
             is_delivery_partner: true,
             vehicle_type: data.vehicleType,
             vehicle_number: data.vehicleNumber,
@@ -1957,6 +2118,48 @@ export function App() {
     }
   };
 
+  const handleCancelOrder = async (
+    orderId: string,
+    reason: string,
+    refundAmount: number,
+    deliveryChargeRefund: number
+  ) => {
+    const cancelledTime = new Date().toISOString();
+    setDeliveryOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              status: 'cancelled',
+              cancelled_at: cancelledTime,
+              cancellation_reason: reason,
+              refund_amount: refundAmount,
+              delivery_charge_refund: deliveryChargeRefund,
+              cancelled_by: 'buyer',
+            }
+          : o
+      )
+    );
+
+    if (supabase) {
+      try {
+        await supabase
+          .from('delivery_orders')
+          .update({
+            status: 'cancelled',
+            cancelled_at: cancelledTime,
+            cancellation_reason: reason,
+            refund_amount: refundAmount,
+            delivery_charge_refund: deliveryChargeRefund,
+            cancelled_by: 'buyer',
+          })
+          .eq('id', orderId);
+      } catch (e) {
+        console.error('Cancel order sync in Supabase:', e);
+      }
+    }
+  };
+
   const handleCreateSampleDeliveryOrder = async (
     orderData: Omit<DeliveryOrder, 'id' | 'created_at'>
   ) => {
@@ -1980,6 +2183,10 @@ export function App() {
   // Order Placement & Payment Verification Handlers
   const handleOrderPlaced = async (newOrder: DeliveryOrder) => {
     setDeliveryOrders((prev) => [newOrder, ...prev]);
+    if (currentUser?.id) {
+      clearUserCart(currentUser.id);
+      setCartCount(0);
+    }
     if (supabase) {
       try {
         await supabase.from('delivery_orders').insert([newOrder]);
@@ -1987,7 +2194,23 @@ export function App() {
         console.error('Supabase order insert sync:', e);
       }
     }
+
+    // Direct WebintoApp Push Notification dispatch for partner
+    try {
+      const partnerRole = newOrder.delivery_partner_id ? 'delivery_partner' : 'seller';
+      const targetPartnerId = newOrder.delivery_partner_id || (newOrder as any).seller_id;
+      await sendOrderAlertToPartner(targetPartnerId, partnerRole, newOrder.order_number, {
+        order_number: newOrder.order_number,
+        item_description: newOrder.item_description,
+        total_paid: newOrder.total_paid || newOrder.total_fare,
+        customer_name: newOrder.customer_name,
+      });
+    } catch (pushErr) {
+      console.warn('handleOrderPlaced push notification notice:', pushErr);
+    }
+
     setSelectedListingForCheckout(null);
+    setUserActiveTab('buyer_orders');
   };
 
   const handleVerifyOrderPayment = async (orderId: string, isApproved: boolean) => {
@@ -2219,12 +2442,25 @@ export function App() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo / Brand */}
-            <BrandLogo
-              size="md"
-              variant="light"
-              onClick={() => setUserActiveTab('marketplace')}
-            />
+            {/* Logo / Brand & Header Search Trigger Button */}
+            <div className="flex items-center gap-2.5">
+              <BrandLogo
+                size="md"
+                variant="light"
+                onClick={() => setUserActiveTab('marketplace')}
+              />
+              {/* Header Search Trigger with Red Accent */}
+              <button
+                type="button"
+                id="header_search_trigger_btn"
+                onClick={() => setIsSearchModalOpen(true)}
+                title="Search Listings, Shops, Vehicles & Services (Ctrl + K)"
+                className="group flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 active:scale-95 text-white rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer border border-red-500/50"
+              >
+                <Search className="w-4 h-4 text-white group-hover:scale-110 transition-transform shrink-0" />
+                <span className="hidden sm:inline text-xs font-black tracking-wide">Search</span>
+              </button>
+            </div>
 
             {/* User Navigation Links */}
             <nav className="hidden lg:flex items-center gap-1">
@@ -2238,6 +2474,24 @@ export function App() {
               >
                 <ShoppingBag className="w-4 h-4" />
                 Marketplace
+              </button>
+
+              {/* Cart Navigation Item */}
+              <button
+                onClick={() => handleRequireAuth('Cart', () => setUserActiveTab('cart'))}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 relative ${
+                  userActiveTab === 'cart'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <ShoppingCart className="w-4 h-4 text-orange-500" />
+                <span>Cart</span>
+                {cartCount > 0 && (
+                  <span className="px-1.5 py-0.2 bg-orange-600 text-white text-[10px] font-black rounded-full min-w-[18px] text-center">
+                    {cartCount}
+                  </span>
+                )}
               </button>
 
               {/* My Orders / Delivery Tracking */}
@@ -2354,8 +2608,26 @@ export function App() {
               )}
             </nav>
 
-            {/* User Profile Badge & Mobile Menu Button */}
+            {/* User Profile Badge, Cart Icon & Mobile Menu Button */}
             <div className="flex items-center gap-2">
+              {/* Quick Header Cart Icon Button (Mobile & Desktop) */}
+              <button
+                onClick={() => handleRequireAuth('Cart', () => setUserActiveTab('cart'))}
+                title="View Shopping Cart"
+                className={`relative p-2 rounded-xl border transition flex items-center justify-center ${
+                  userActiveTab === 'cart'
+                    ? 'bg-orange-500 text-white border-orange-600 shadow-sm'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200 shadow-xs'
+                }`}
+              >
+                <ShoppingCart className="w-5 h-5" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 bg-orange-600 text-white text-[10px] font-black rounded-full min-w-[18px] text-center shadow-xs border-2 border-white">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
+
               {currentUser ? (
                 <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-slate-200">
                   <div
@@ -2499,6 +2771,17 @@ export function App() {
 
             <button
               onClick={() => {
+                setIsSearchModalOpen(true);
+                setMobileMenuOpen(false);
+              }}
+              className="w-full p-2.5 rounded-xl text-xs font-black text-left flex items-center gap-2 bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-xs"
+            >
+              <Search className="w-4 h-4 text-white" />
+              <span>Search Listings, Vehicles & Services</span>
+            </button>
+
+            <button
+              onClick={() => {
                 setUserActiveTab('marketplace');
                 setMobileMenuOpen(false);
               }}
@@ -2508,6 +2791,26 @@ export function App() {
             >
               <ShoppingBag className="w-4 h-4" />
               Marketplace
+            </button>
+
+            <button
+              onClick={() => {
+                handleRequireAuth('Cart', () => setUserActiveTab('cart'));
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center justify-between ${
+                userActiveTab === 'cart' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-orange-500" />
+                <span>My Shopping Cart</span>
+              </div>
+              {cartCount > 0 && (
+                <span className="px-2 py-0.5 bg-orange-600 text-white text-[10px] font-black rounded-full">
+                  {cartCount} items
+                </span>
+              )}
             </button>
 
             <button
@@ -2671,8 +2974,19 @@ export function App() {
               onOpenSubmit={() => handleRequireAuth('Submit Listing', () => setUserActiveTab('submit'))}
               onOpenPro={() => handleRequireAuth('PRO Plans', () => setUserActiveTab('pro_upgrade'))}
               onOrderNow={(item) => setSelectedListingForCheckout(item)}
+              onAddToCart={(item) => handleAddToCart(item)}
             />
           </div>
+        )}
+
+        {/* VIEW 1.2: SHOPPING CART SCREEN */}
+        {currentUser && userActiveTab === 'cart' && (
+          <CartScreen
+            currentUser={currentUser}
+            onExploreMarketplace={() => setUserActiveTab('marketplace')}
+            onProceedToCheckout={handleProceedFromCartToCheckout}
+            onOpenPolicyModal={openAppPolicy}
+          />
         )}
 
         {/* VIEW 1.5: BUYER ORDERS MANAGEMENT & LIVE CONFIRMATION */}
@@ -2681,7 +2995,9 @@ export function App() {
             currentUser={currentUser}
             orders={deliveryOrders}
             onConfirmDeliverySuccess={handleConfirmDeliverySuccess}
+            onCancelOrder={handleCancelOrder}
             onExploreMarketplace={() => setUserActiveTab('marketplace')}
+            onOpenPolicyModal={() => openAppPolicy('terms_conditions')}
           />
         )}
 
@@ -2853,13 +3169,46 @@ export function App() {
         )}
       </main>
 
-      {/* Listing Detail Modal with Direct WhatsApp Protocol */}
+      {/* Universal Search Modal Overlay */}
+      <SearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        listings={listings}
+        onSelectListing={(listing) => {
+          setSelectedListing(listing);
+          setUserActiveTab('marketplace');
+        }}
+      />
+
+      {/* Listing Detail Modal with Direct WhatsApp Protocol & Add to Cart */}
       <ListingDetailModal
         listing={selectedListing}
         onClose={() => setSelectedListing(null)}
         onOrderNow={(item) => setSelectedListingForCheckout(item)}
+        onAddToCart={(item) => handleAddToCart(item)}
         isAdmin={false}
       />
+
+      {/* Cart Toast Notification */}
+      {cartToast.visible && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0">
+            <Check className="w-4 h-4 stroke-[3]" />
+          </div>
+          <div>
+            <div className="text-xs font-bold">{cartToast.message}</div>
+            <button
+              onClick={() => {
+                setCartToast((prev) => ({ ...prev, visible: false }));
+                setUserActiveTab('cart');
+              }}
+              className="text-[11px] font-extrabold text-orange-400 hover:text-orange-300 underline"
+            >
+              View Cart →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 100% Prepaid Online Advance Payment Checkout Modal */}
       {selectedListingForCheckout && (
@@ -2886,6 +3235,22 @@ export function App() {
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>© {new Date().getFullYear()} Meri Local Bazaar. All rights reserved.</div>
           <div className="flex items-center gap-4 text-[11px] font-semibold text-slate-600 flex-wrap justify-center">
+            <button
+              type="button"
+              onClick={() => openAppPolicy('terms_conditions')}
+              className="text-slate-600 hover:text-orange-600 hover:underline transition cursor-pointer font-medium"
+            >
+              Terms & Conditions
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => openAppPolicy('privacy_policy')}
+              className="text-slate-600 hover:text-orange-600 hover:underline transition cursor-pointer font-medium"
+            >
+              Privacy Policy
+            </button>
+            <span>•</span>
             <span>Verified Local Sellers</span>
             <span>•</span>
             <span>WhatsApp Direct Inquiry</span>
@@ -2906,6 +3271,13 @@ export function App() {
           </div>
         </div>
       </footer>
+
+      {/* Centralized Policy Viewer Modal */}
+      <PolicyModal
+        isOpen={appPolicyModalOpen}
+        initialType={appPolicyModalType}
+        onClose={() => setAppPolicyModalOpen(false)}
+      />
     </div>
   );
 }

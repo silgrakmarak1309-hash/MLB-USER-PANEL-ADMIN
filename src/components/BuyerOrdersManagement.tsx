@@ -9,10 +9,14 @@ import {
   MessageCircle,
   Search,
   AlertCircle,
+  AlertTriangle,
   ShoppingBag,
   ExternalLink,
   ShieldCheck,
   ChevronRight,
+  XCircle,
+  X,
+  FileText,
 } from 'lucide-react';
 import { DeliveryOrder, UserProfile, formatPrice, getWhatsAppUrl } from '../types';
 
@@ -20,20 +24,32 @@ interface BuyerOrdersManagementProps {
   currentUser: UserProfile;
   orders: DeliveryOrder[];
   onConfirmDeliverySuccess: (orderId: string) => Promise<void> | void;
+  onCancelOrder?: (
+    orderId: string,
+    reason: string,
+    refundAmount: number,
+    deliveryChargeRefund: number
+  ) => Promise<void> | void;
   onExploreMarketplace: () => void;
+  onOpenPolicyModal?: () => void;
 }
 
 export const BuyerOrdersManagement: React.FC<BuyerOrdersManagementProps> = ({
   currentUser,
   orders,
   onConfirmDeliverySuccess,
+  onCancelOrder,
   onExploreMarketplace,
+  onOpenPolicyModal,
 }) => {
   const [filter, setFilter] = useState<
-    'all' | 'delivered_by_boy' | 'out_for_delivery' | 'pending' | 'success'
+    'all' | 'delivered_by_boy' | 'out_for_delivery' | 'pending' | 'success' | 'cancelled'
   >('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [cancellingOrder, setCancellingOrder] = useState<DeliveryOrder | null>(null);
+  const [cancellationReason, setCancellationReason] = useState('Change of plans / Ordered by mistake');
+  const [isCancelling, setIsCancelling] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // Match buyer's orders (by ID, phone, email, or customer name)
@@ -67,6 +83,8 @@ export const BuyerOrdersManagement: React.FC<BuyerOrdersManagementProps> = ({
         return false;
     } else if (filter === 'success') {
       if (o.status !== 'success' && o.status !== 'delivered') return false;
+    } else if (filter === 'cancelled') {
+      if (o.status !== 'cancelled') return false;
     }
 
     if (searchQuery.trim()) {
@@ -92,6 +110,47 @@ export const BuyerOrdersManagement: React.FC<BuyerOrdersManagementProps> = ({
       alert(err?.message || 'Failed to confirm delivery. Please try again.');
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  const handleConfirmCancellation = async () => {
+    if (!cancellingOrder) return;
+
+    try {
+      setIsCancelling(true);
+      const isOutForDelivery = cancellingOrder.status === 'out_for_delivery';
+      
+      // CRITICAL OUT FOR DELIVERY RULE:
+      // Product price is refundable; Delivery charge is NON-REFUNDABLE (₹0)
+      const productPrice = cancellingOrder.product_price || 0;
+      const deliveryCharge = cancellingOrder.delivery_fee || cancellingOrder.total_fare || 0;
+      
+      const refundAmount = isOutForDelivery
+        ? productPrice
+        : (cancellingOrder.total_paid || productPrice + deliveryCharge);
+      
+      const deliveryChargeRefund = isOutForDelivery ? 0 : deliveryCharge;
+
+      if (onCancelOrder) {
+        await onCancelOrder(
+          cancellingOrder.id,
+          cancellationReason,
+          refundAmount,
+          deliveryChargeRefund
+        );
+      }
+
+      setSuccessToast(
+        isOutForDelivery
+          ? `Order #${cancellingOrder.order_number} cancelled. Delivery charges are non-refundable after Out for Delivery. ₹${formatPrice(refundAmount)} product refund initiated.`
+          : `Order #${cancellingOrder.order_number} cancelled successfully. Full refund of ₹${formatPrice(refundAmount)} initiated.`
+      );
+      setCancellingOrder(null);
+      setTimeout(() => setSuccessToast(null), 6000);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to cancel order. Please try again.');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -174,6 +233,7 @@ export const BuyerOrdersManagement: React.FC<BuyerOrdersManagementProps> = ({
                 { id: 'out_for_delivery', label: `In-Transit (${inTransitCount})` },
                 { id: 'pending', label: 'Processing' },
                 { id: 'success', label: 'Completed' },
+                { id: 'cancelled', label: 'Cancelled' },
               ] as const
             ).map((f) => (
               <button
@@ -268,6 +328,20 @@ export const BuyerOrdersManagement: React.FC<BuyerOrdersManagementProps> = ({
                       {isPendingVerif && (
                         <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full">
                           Advance Payment Verification in Progress
+                        </span>
+                      )}
+
+                      {order.status === 'cancelled' && (
+                        <span className="bg-rose-100 text-rose-800 text-xs font-black uppercase px-3 py-1 rounded-full flex items-center gap-1.5 border border-rose-300">
+                          <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                          Cancelled {order.refund_amount !== undefined ? `• Refund: ₹${formatPrice(order.refund_amount)}` : ''}
+                        </span>
+                      )}
+
+                      {order.terms_accepted && (
+                        <span className="bg-slate-100 text-slate-600 text-[10px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 border border-slate-200">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                          Policy Consented
                         </span>
                       )}
                     </div>
@@ -495,12 +569,229 @@ export const BuyerOrdersManagement: React.FC<BuyerOrdersManagementProps> = ({
                       )}
                     </div>
                   )}
+
+                  {/* Cancelled Order Notice & Refund Details */}
+                  {order.status === 'cancelled' && (
+                    <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-2 text-xs text-rose-950">
+                      <div className="flex items-center justify-between font-black text-rose-900">
+                        <span className="flex items-center gap-1.5">
+                          <XCircle className="w-4 h-4 text-rose-600" />
+                          This Order Has Been Cancelled
+                        </span>
+                        {order.refund_amount !== undefined && (
+                          <span className="bg-rose-200/80 px-2.5 py-0.5 rounded-lg text-rose-900 font-mono font-bold">
+                            Refund Amount: ₹{formatPrice(order.refund_amount)}
+                          </span>
+                        )}
+                      </div>
+                      {order.cancellation_reason && (
+                        <p className="text-rose-800">
+                          <strong>Reason:</strong> {order.cancellation_reason}
+                        </p>
+                      )}
+                      {order.delivery_charge_refund === 0 && (
+                        <p className="text-[11px] text-rose-700 font-medium">
+                          Note: Order was Out for Delivery at cancellation time, so delivery charge was non-refundable in accordance with Terms & Conditions.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Active Order Footer: Cancel Order Option */}
+                  {!isDeliveredByBoy && !isSuccess && order.status !== 'cancelled' && (
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <div className="text-[11px] text-slate-400">
+                        Need help with this order?
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCancellingOrder(order);
+                          setCancellationReason('Change of plans / Ordered by mistake');
+                        }}
+                        className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer hover:border-rose-300"
+                      >
+                        <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Cancel Order</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* CANCELLATION CONFIRMATION MODAL WITH OUT FOR DELIVERY RULE */}
+      {cancellingOrder && (
+        <div
+          onClick={() => !isCancelling && setCancellingOrder(null)}
+          className="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col border border-slate-200 my-auto"
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-rose-900 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black">Cancel Order #{cancellingOrder.order_number}</h3>
+                  <p className="text-[11px] text-slate-300">
+                    {cancellingOrder.item_description}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => !isCancelling && setCancellingOrder(null)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 sm:p-6 space-y-4 text-xs text-slate-700">
+              {/* CRITICAL OUT FOR DELIVERY EXPLICIT ALERT */}
+              {cancellingOrder.status === 'out_for_delivery' ? (
+                <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl space-y-2 text-amber-950">
+                  <div className="flex items-center gap-2 font-black text-amber-900 text-sm">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                    Delivery Charges are Non-Refundable
+                  </div>
+                  <p className="leading-relaxed">
+                    <strong>"Delivery Charges are non-refundable after the order has been marked Out for Delivery."</strong>
+                  </p>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Aapka parcel delivery rider ke paas in-transit hai. Terms & Conditions ke anusaar, delivery partner ki fuel aur operational cost cover karne ke liye delivery charges (₹{formatPrice(cancellingOrder.delivery_fee || cancellingOrder.total_fare || 0)}) refund nahi honge.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-950 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    100% Full Refund Eligible
+                  </div>
+                  <p className="text-[11px] text-emerald-800">
+                    Aapka order abhi dispatch nahi hua hai, isliye aapko product price aur delivery fee dono ka 100% refund milega.
+                  </p>
+                </div>
+              )}
+
+              {/* Refund Breakdown Card */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                <div className="font-black text-slate-900 text-xs uppercase tracking-wider">
+                  Refund Calculation Breakdown
+                </div>
+                <div className="space-y-1.5 text-xs text-slate-600 pt-1">
+                  <div className="flex justify-between">
+                    <span>Product Price:</span>
+                    <span className="font-bold text-slate-900">
+                      ₹{formatPrice(cancellingOrder.product_price || 0)} (Refundable)
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Delivery Charge:</span>
+                    <span className={`font-bold ${cancellingOrder.status === 'out_for_delivery' ? 'text-rose-600' : 'text-slate-900'}`}>
+                      {cancellingOrder.status === 'out_for_delivery'
+                        ? `₹${formatPrice(cancellingOrder.delivery_fee || cancellingOrder.total_fare || 0)} (Non-Refundable: ₹0)`
+                        : `₹${formatPrice(cancellingOrder.delivery_fee || cancellingOrder.total_fare || 0)} (Refundable)`}
+                    </span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-2 flex justify-between font-black text-sm text-slate-900">
+                    <span>Estimated Net Refund:</span>
+                    <span className="text-emerald-700 font-mono text-base">
+                      ₹
+                      {formatPrice(
+                        cancellingOrder.status === 'out_for_delivery'
+                          ? cancellingOrder.product_price || 0
+                          : (cancellingOrder.total_paid ||
+                              (cancellingOrder.product_price || 0) +
+                                (cancellingOrder.delivery_fee || cancellingOrder.total_fare || 0))
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reason selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Select Reason for Cancellation:
+                </label>
+                <select
+                  value={cancellationReason}
+                  onChange={(e) => setCancellationReason(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                >
+                  <option value="Change of plans / Ordered by mistake">
+                    Change of plans / Ordered by mistake
+                  </option>
+                  <option value="Delivery taking longer than expected">
+                    Delivery taking longer than expected
+                  </option>
+                  <option value="Found alternative / bought locally">
+                    Found alternative / bought locally
+                  </option>
+                  <option value="Incorrect address provided">
+                    Incorrect address provided
+                  </option>
+                  <option value="Other / Personal reasons">
+                    Other / Personal reasons
+                  </option>
+                </select>
+              </div>
+
+              <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1">
+                <span>Terms & Conditions and Privacy Policy apply.</span>
+                {onOpenPolicyModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenPolicyModal}
+                    className="text-orange-600 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    <FileText className="w-3 h-3" />
+                    View Policy
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setCancellingOrder(null)}
+                disabled={isCancelling}
+                className="py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancellation}
+                disabled={isCancelling}
+                className="py-2.5 px-5 bg-rose-600 hover:bg-rose-700 active:scale-98 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-rose-600/20 cursor-pointer disabled:opacity-50"
+              >
+                {isCancelling ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    <span>Confirm Cancellation</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
