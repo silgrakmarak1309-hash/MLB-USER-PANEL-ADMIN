@@ -310,12 +310,17 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
     if (regFilter !== 'all' && v.status !== regFilter) return false;
     if (regSearch) {
       const q = regSearch.toLowerCase();
+      const vehNo = (v.vehicle_reg_no || v.vehicle_number || '').toLowerCase();
+      const driverName = (v.driver_name || '').toLowerCase();
+      const dlNo = (v.driving_license_no || '').toLowerCase();
+      const phone = (v.driver_phone || '').toLowerCase();
+      const model = (v.vehicle_model || v.vehicle_type || '').toLowerCase();
       return (
-        v.vehicle_reg_no.toLowerCase().includes(q) ||
-        v.driver_name.toLowerCase().includes(q) ||
-        v.driving_license_no.toLowerCase().includes(q) ||
-        v.driver_phone.includes(q) ||
-        v.vehicle_model.toLowerCase().includes(q)
+        vehNo.includes(q) ||
+        driverName.includes(q) ||
+        dlNo.includes(q) ||
+        phone.includes(q) ||
+        model.includes(q)
       );
     }
     return true;
@@ -335,7 +340,9 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
     if (
       userRoleFilter === 'delivery_partners' &&
       p.role !== 'delivery_partner' &&
-      !p.is_delivery_partner
+      !p.is_delivery_partner &&
+      !p.vehicle_number &&
+      !p.partner_status
     )
       return false;
 
@@ -1126,7 +1133,7 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-slate-900 text-base">
-                        {veh.vehicle_model} ({veh.vehicle_reg_no})
+                        {veh.vehicle_model} ({veh.vehicle_reg_no || veh.vehicle_number || 'Registered'})
                       </span>
                       <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
                         {veh.vehicle_type}

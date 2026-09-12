@@ -94,6 +94,7 @@ export const DeliveryPartnerDashboard: React.FC<DeliveryPartnerDashboardProps> =
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [overrideViewOrders, setOverrideViewOrders] = useState<boolean>(false);
 
   // New Shipment Creation state (for quick local order dispatch testing)
   const [newCustName, setNewCustName] = useState('Dilseng Sangma');
@@ -229,7 +230,7 @@ export const DeliveryPartnerDashboard: React.FC<DeliveryPartnerDashboardProps> =
   // =========================================================================
   // CONDITION 1: USER IS NOT REGISTERED -> SHOW REGISTRATION FORM
   // =========================================================================
-  if (notRegistered) {
+  if (notRegistered && !overrideViewOrders) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
         <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 shadow-md">
@@ -252,13 +253,22 @@ export const DeliveryPartnerDashboard: React.FC<DeliveryPartnerDashboardProps> =
                 </div>
               </div>
 
-              <button
-                onClick={onNavigateHome}
-                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-700"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                Return to Marketplace
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setOverrideViewOrders(true)}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow"
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  Preview Orders Pool
+                </button>
+                <button
+                  onClick={onNavigateHome}
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-700"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Return to Marketplace
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -266,10 +276,13 @@ export const DeliveryPartnerDashboard: React.FC<DeliveryPartnerDashboardProps> =
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8">
           <DeliveryPartnerRegistration
             currentUser={currentUser}
+            onSubmit={onUpdatePartnerProfile}
             onSuccess={() => {
               onRefresh();
             }}
             onCancel={onNavigateHome}
+            onNavigateToDashboard={() => setOverrideViewOrders(true)}
+            onNavigateHome={onNavigateHome}
           />
         </main>
       </div>
@@ -279,7 +292,7 @@ export const DeliveryPartnerDashboard: React.FC<DeliveryPartnerDashboardProps> =
   // =========================================================================
   // CONDITION 2: PARTNER STATUS IS PENDING OR REJECTED
   // =========================================================================
-  if (isPending || isRejected) {
+  if ((isPending || isRejected) && !overrideViewOrders) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
         <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
@@ -289,12 +302,21 @@ export const DeliveryPartnerDashboard: React.FC<DeliveryPartnerDashboardProps> =
                 <Truck className="w-6 h-6 text-orange-400" />
                 <span className="font-bold text-lg text-white">Delivery Partner Verification Portal</span>
               </div>
-              <button
-                onClick={onNavigateHome}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
-              >
-                Return Home
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setOverrideViewOrders(true)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  Open Order Dashboard
+                </button>
+                <button
+                  onClick={onNavigateHome}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+                >
+                  Return Home
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -318,17 +340,24 @@ export const DeliveryPartnerDashboard: React.FC<DeliveryPartnerDashboardProps> =
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
+                onClick={() => setOverrideViewOrders(true)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow-lg"
+              >
+                <Package className="w-4 h-4" />
+                Open Partner Order Dashboard
+              </button>
+              <button
                 onClick={handleQuickDemoApprove}
-                className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow-lg"
+                className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow-lg"
               >
                 <Sparkles className="w-4 h-4" />
-                Instant Demo Approval (Test Driver Portal)
+                Instant Demo Approval (Test Full Dispatch)
               </button>
               <button
                 onClick={onRefresh}
-                className="w-full sm:w-auto px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
               >
-                <RefreshCw className="w-4 h-4" /> Refresh Status
+                <RefreshCw className="w-4 h-4" /> Refresh
               </button>
             </div>
           </div>
@@ -338,10 +367,35 @@ export const DeliveryPartnerDashboard: React.FC<DeliveryPartnerDashboardProps> =
   }
 
   // =========================================================================
-  // CONDITION 3: APPROVED DELIVERY PARTNER -> FULL DRIVER DASHBOARD
+  // CONDITION 3: APPROVED DELIVERY PARTNER (OR DEMO/PREVIEW MODE) -> FULL DRIVER DASHBOARD
   // =========================================================================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      {/* Pending / Preview Banner if not approved */}
+      {!isApproved && (
+        <div className="bg-amber-600/90 text-white px-4 py-2 text-xs font-bold flex items-center justify-between gap-3 border-b border-amber-500">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 shrink-0" />
+            <span>
+              Partner Account Status: <strong>{currentUser.partner_status?.toUpperCase() || 'PREVIEW MODE'}</strong> (Under Admin Review). Showing active delivery dispatches.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleQuickDemoApprove}
+              className="px-2.5 py-1 bg-white text-amber-900 rounded-lg text-[11px] font-black hover:bg-amber-50 transition"
+            >
+              1-Click Demo Approve
+            </button>
+            <button
+              onClick={() => setOverrideViewOrders(false)}
+              className="px-2.5 py-1 bg-amber-800 hover:bg-amber-700 text-white rounded-lg text-[11px] transition"
+            >
+              View Application Status
+            </button>
+          </div>
+        </div>
+      )}
       {/* 1. TOP BAR */}
       <header className="bg-slate-900 border-b border-emerald-950/80 sticky top-0 z-40 shadow-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

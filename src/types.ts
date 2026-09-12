@@ -498,7 +498,8 @@ export interface VehicleRegistration extends LocalAddressFields {
   driver_whatsapp?: string;
   driver_email?: string;
   vehicle_type: 'Local Cab / Taxi' | 'Traveler (12-26 Seater)' | 'Auto Rickshaw' | 'Commercial Bike' | 'Pickup / Commercial Van' | string;
-  vehicle_reg_no: string;
+  vehicle_reg_no?: string;
+  vehicle_number?: string;
   vehicle_model: string;
   vehicle_year?: string;
   driving_license_no: string;

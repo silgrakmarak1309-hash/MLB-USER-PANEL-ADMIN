@@ -10,6 +10,8 @@ import {
   Truck,
   Zap,
   Store,
+  Mail,
+  AlertCircle,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { supabase } from '../lib/supabase';
@@ -22,100 +24,173 @@ interface LoginScreenProps {
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [customEmail, setCustomEmail] = useState('');
   const [customName, setCustomName] = useState('');
+  const [customPassword, setCustomPassword] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
 
-  const handleGoogleSignIn = async (
-    presetEmail?: string,
-    presetName?: string,
-    presetAvatar?: string
-  ) => {
+  // 1. Google OAuth with Supabase Auth
+  const handleGoogleOAuthSignIn = async () => {
+    if (!supabase) {
+      setError('Supabase client is not available. Please check environment configuration.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
-    // Dynamically derive current deployment origin (e.g. Vercel deployment URL, production domain, or preview sandbox)
     const currentOrigin =
       typeof window !== 'undefined' && window.location?.origin
         ? window.location.origin
-        : 'https://ais-dev-mylfdfrzwnyjhipfvcskrq-563394565880.asia-southeast1.run.app';
+        : window.location.href.split('#')[0].split('?')[0];
 
     try {
-      // If live Supabase client exists, attempt OAuth initiation with dynamic origin redirect
-      if (supabase && !presetEmail && !customEmail.trim()) {
-        try {
-          const { data: oauthData, error: oauthError } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
+      const { data: oauthData, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: currentOrigin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (oauthError) {
+        throw oauthError;
+      }
+
+      if (oauthData?.url) {
+        window.location.href = oauthData.url;
+        return;
+      }
+    } catch (err: any) {
+      console.error('Supabase Google OAuth error:', err);
+      setError(err?.message || 'Google OAuth failed to redirect. You can also sign in directly with Email.');
+      setLoading(false);
+    }
+  };
+
+  // 2. Direct Email Signup / Signin with Supabase Auth
+  const handleEmailAuthSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    if (!supabase) {
+      setError('Supabase is not initialized.');
+      return;
+    }
+
+    const cleanEmail = customEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setError('Please provide a valid email address (e.g. name@gmail.com).');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    const cleanName = customName.trim() || cleanEmail.split('@')[0];
+    const passwordToUse = customPassword.trim() || `MLB@${cleanEmail.replace(/[^a-zA-Z0-9]/g, '')}#2026`;
+
+    try {
+      let authUser: any = null;
+
+      // Try signing in first
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: passwordToUse,
+      });
+
+      if (!signInError && signInData?.user) {
+        authUser = signInData.user;
+      } else {
+        const msg = signInError?.message?.toLowerCase() || '';
+        if (
+          msg.includes('invalid login credentials') ||
+          msg.includes('user not found') ||
+          msg.includes('invalid credentials') ||
+          msg.includes('not confirmed')
+        ) {
+          // Register new user in Supabase Authentication (auth.users)
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password: passwordToUse,
             options: {
-              redirectTo: currentOrigin,
-              queryParams: {
-                access_type: 'offline',
-                prompt: 'consent',
+              data: {
+                full_name: cleanName,
+                name: cleanName,
+                avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanName)}&backgroundColor=ea580c,f59e0b,059669`,
               },
+              emailRedirectTo: window.location.origin,
             },
           });
-          if (oauthError) {
-            console.warn('Supabase OAuth notice:', oauthError.message);
-          } else if (oauthData?.url) {
-            if (typeof window !== 'undefined') {
-              window.location.href = oauthData.url;
-              return;
-            }
+
+          if (signUpError) {
+            throw signUpError;
           }
-        } catch (oauthEx) {
-          console.warn('OAuth redirect notice:', oauthEx);
+
+          if (signUpData?.user) {
+            authUser = signUpData.user;
+          }
+        } else if (signInError) {
+          throw signInError;
         }
       }
 
-      const emailToUse = presetEmail || customEmail.trim() || 'user@gmail.com';
-      const nameToUse = presetName || customName.trim() || (emailToUse ? emailToUse.split('@')[0] : 'Member');
-      const avatarToUse =
-        presetAvatar ||
-        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(nameToUse)}&backgroundColor=ea580c,f59e0b,059669`;
+      if (!authUser) {
+        setSuccessMsg('Confirmation email sent! Please check your email inbox to verify your account.');
+        setLoading(false);
+        return;
+      }
 
-      // Construct verified UserProfile object
+      // Sync user profile to the Supabase 'profiles' table with real auth user UUID
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      const isUserAdmin =
+        cleanEmail === 'silgrakmarak1309@gmail.com' ||
+        cleanEmail === 'merilocalbazaar@gmail.com' ||
+        cleanEmail === 'chiamesangma588@gmail.com' ||
+        existingProfile?.role === 'admin';
+
       const userProfile: UserProfile = {
-        id: `usr_${Math.random().toString(36).substring(2, 9)}`,
-        email: emailToUse,
-        full_name: nameToUse,
-        avatar_url: avatarToUse,
-        phone: '9876543210',
-        city: 'Tura, Meghalaya',
-        role: emailToUse.includes('admin') || emailToUse === 'merilocalbazaar@gmail.com' ? 'admin' : 'user',
-        is_pro: true,
-        pro_status: 'active',
-        pro_expiry: '2028-12-31',
-        is_delivery_partner: false,
-        partner_status: 'approved',
-        created_at: new Date().toISOString(),
+        id: authUser.id, // REAL SUPABASE AUTH USER UUID
+        email: authUser.email || cleanEmail,
+        full_name: existingProfile?.full_name || cleanName,
+        avatar_url:
+          existingProfile?.avatar_url ||
+          authUser.user_metadata?.avatar_url ||
+          `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanName)}&backgroundColor=ea580c,f59e0b,059669`,
+        phone: existingProfile?.phone || authUser.phone || '9876543210',
+        city: existingProfile?.city || 'Tura, Meghalaya',
+        state: existingProfile?.state || 'Meghalaya',
+        role: (existingProfile?.role || (isUserAdmin ? 'admin' : 'user')) as any,
+        is_pro: existingProfile?.is_pro ?? isUserAdmin,
+        pro_status: existingProfile?.pro_status || (isUserAdmin ? 'active' : 'inactive'),
+        is_delivery_partner: existingProfile?.is_delivery_partner || false,
+        partner_status: existingProfile?.partner_status || 'none',
+        created_at: existingProfile?.created_at || new Date().toISOString(),
       };
 
-      // Persist to Supabase if table is ready
-      if (supabase) {
-        try {
-          await supabase.from('profiles').upsert({
-            id: userProfile.id,
-            email: userProfile.email,
-            full_name: userProfile.full_name,
-            phone: userProfile.phone,
-            role: userProfile.role,
-            is_pro: userProfile.is_pro,
-          });
-        } catch (dbErr) {
-          console.warn('Supabase profile upsert note:', dbErr);
-        }
-      }
+      await supabase.from('profiles').upsert([userProfile]);
 
-      // Persist locally for instant resume on refresh
-      localStorage.setItem('mlb_active_user', JSON.stringify(userProfile));
+      try {
+        localStorage.setItem('mlb_active_user', JSON.stringify(userProfile));
+      } catch (_) {}
 
       setTimeout(() => {
         setLoading(false);
         onLoginSuccess(userProfile);
-      }, 400);
+      }, 300);
     } catch (err: any) {
       setLoading(false);
-      setError(err?.message || 'Google authentication failed. Please try again.');
+      console.error('Login error:', err);
+      setError(err?.message || 'Supabase authentication failed. Please verify credentials.');
     }
   };
 
@@ -131,7 +206,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
         <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[11px] font-semibold text-slate-300 backdrop-blur-md">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Secure Verified Access</span>
+          <span>Verified Supabase Auth</span>
         </div>
       </div>
 
@@ -174,18 +249,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </div>
 
           {/* Form / Actions Body */}
-          <div className="p-6 sm:p-8 space-y-5">
+          <div className="p-6 sm:p-8 space-y-4">
             {error && (
-              <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs font-semibold text-red-700">
-                {error}
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs font-semibold text-red-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {successMsg && (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs font-semibold text-emerald-700 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{successMsg}</span>
               </div>
             )}
 
             {/* Primary Google Login Button */}
             <button
-              onClick={() => handleGoogleSignIn()}
+              onClick={handleGoogleOAuthSignIn}
               disabled={loading}
-              className="w-full py-4 px-5 bg-white hover:bg-slate-50 active:scale-[0.99] border-2 border-slate-200 hover:border-orange-300 rounded-2xl text-slate-800 text-sm font-bold flex items-center justify-center gap-3.5 transition shadow-sm hover:shadow-md disabled:opacity-50 group"
+              className="w-full py-4 px-5 bg-white hover:bg-slate-50 active:scale-[0.99] border-2 border-slate-200 hover:border-orange-300 rounded-2xl text-slate-800 text-sm font-bold flex items-center justify-center gap-3.5 transition shadow-sm hover:shadow-md disabled:opacity-50 group cursor-pointer"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></div>
@@ -210,55 +293,85 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 </svg>
               )}
               <span className="text-base font-extrabold text-slate-800">
-                {loading ? 'Verifying Google ID...' : 'Continue with Google'}
+                {loading ? 'Connecting Supabase Auth...' : 'Continue with Google'}
               </span>
             </button>
 
-            {/* Custom Google Email Option */}
+            {/* Custom Google / Email Option */}
             <div className="pt-2 border-t border-slate-100">
               {!showCustomInput ? (
                 <button
                   type="button"
                   onClick={() => setShowCustomInput(true)}
-                  className="w-full text-center text-xs text-slate-500 hover:text-orange-600 font-bold transition py-1 flex items-center justify-center gap-1"
+                  className="w-full text-center text-xs text-slate-500 hover:text-orange-600 font-bold transition py-1 flex items-center justify-center gap-1 cursor-pointer"
                 >
-                  <span>Or enter custom Gmail ID</span>
-                  <ArrowRight className="w-3 h-3" />
+                  <span>Or sign in / register with Email ID</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               ) : (
-                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 animate-in fade-in duration-200">
-                  <div className="text-xs font-bold text-slate-700">Enter Your Gmail Account:</div>
-                  <input
-                    type="text"
-                    placeholder="Your Full Name"
-                    value={customName}
-                    onChange={(e) => setCustomName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                  />
-                  <input
-                    type="email"
-                    placeholder="yourname@gmail.com"
-                    value={customEmail}
-                    onChange={(e) => setCustomEmail(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-orange-500 focus:outline-none"
-                  />
+                <form onSubmit={handleEmailAuthSubmit} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 animate-in fade-in duration-200">
+                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-1">
+                    <Mail className="w-4 h-4 text-orange-600" />
+                    <span>Supabase Email Authentication</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="yourname@gmail.com"
+                      value={customEmail}
+                      onChange={(e) => setCustomEmail(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">
+                      Display Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Your Full Name"
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-600 uppercase mb-1">
+                      Password (Optional)
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={customPassword}
+                      onChange={(e) => setCustomPassword(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                    />
+                  </div>
+
                   <div className="flex gap-2 pt-1">
                     <button
                       type="button"
                       onClick={() => setShowCustomInput(false)}
-                      className="w-1/2 py-2 text-xs font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 rounded-xl"
+                      className="w-1/2 py-2 text-xs font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 rounded-xl cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
-                      type="button"
-                      onClick={() => handleGoogleSignIn()}
-                      className="w-1/2 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl shadow-xs"
+                      type="submit"
+                      disabled={loading}
+                      className="w-1/2 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
                     >
-                      Login Now
+                      {loading ? 'Authenticating...' : 'Sign In / Register'}
                     </button>
                   </div>
-                </div>
+                </form>
               )}
             </div>
 
@@ -266,7 +379,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <div className="pt-2 border-t border-slate-100 grid grid-cols-3 gap-2 text-center">
               <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
-                <div className="text-[9px] font-bold text-slate-600 leading-tight">100% Verified</div>
+                <div className="text-[9px] font-bold text-slate-600 leading-tight">100% Supabase Auth</div>
               </div>
               <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
                 <MessageCircle className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
@@ -295,3 +408,4 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     </div>
   );
 };
+
