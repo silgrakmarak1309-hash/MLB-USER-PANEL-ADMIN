@@ -214,7 +214,7 @@ export const DeliveryPartnerDashboard: React.FC<DeliveryPartnerDashboardProps> =
   const handleQuickDemoApprove = async () => {
     if (onUpdatePartnerProfile) {
       await onUpdatePartnerProfile({
-        fullName: currentUser.full_name || 'Silgrak Marak',
+        fullName: currentUser.full_name || 'Delivery Partner',
         phone: currentUser.phone || '9876543210',
         vehicleType: (currentUser.vehicle_type as any) || 'Bike',
         vehicleNumber: currentUser.vehicle_number || 'ML-08-A-4592',

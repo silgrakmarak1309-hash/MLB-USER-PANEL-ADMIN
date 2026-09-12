@@ -34,12 +34,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setLoading(true);
     setError(null);
 
-    const emailToUse = presetEmail || customEmail.trim() || 'merilocalbazaar@gmail.com';
-    const nameToUse = presetName || customName.trim() || 'Silgrak Marak';
-    const avatarToUse =
-      presetAvatar ||
-      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
-
     // Dynamically derive current deployment origin (e.g. Vercel deployment URL, production domain, or preview sandbox)
     const currentOrigin =
       typeof window !== 'undefined' && window.location?.origin
@@ -48,9 +42,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
     try {
       // If live Supabase client exists, attempt OAuth initiation with dynamic origin redirect
-      if (supabase && !presetEmail && !customEmail) {
+      if (supabase && !presetEmail && !customEmail.trim()) {
         try {
-          const { error: oauthError } = await supabase.auth.signInWithOAuth({
+          const { data: oauthData, error: oauthError } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
               redirectTo: currentOrigin,
@@ -62,11 +56,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           });
           if (oauthError) {
             console.warn('Supabase OAuth notice:', oauthError.message);
+          } else if (oauthData?.url) {
+            if (typeof window !== 'undefined') {
+              window.location.href = oauthData.url;
+              return;
+            }
           }
         } catch (oauthEx) {
           console.warn('OAuth redirect notice:', oauthEx);
         }
       }
+
+      const emailToUse = presetEmail || customEmail.trim() || 'user@gmail.com';
+      const nameToUse = presetName || customName.trim() || (emailToUse ? emailToUse.split('@')[0] : 'Member');
+      const avatarToUse =
+        presetAvatar ||
+        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(nameToUse)}&backgroundColor=ea580c,f59e0b,059669`;
 
       // Construct verified UserProfile object
       const userProfile: UserProfile = {

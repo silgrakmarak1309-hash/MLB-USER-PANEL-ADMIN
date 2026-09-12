@@ -58,8 +58,8 @@ export const ListingSubmissionView: React.FC<ListingSubmissionViewProps> = ({
   onCancel,
   onNavigateToPro,
   userPhone = '9876543210',
-  userName = 'Silgrak Marak',
-  userId = 'usr_admin',
+  userName = 'Seller',
+  userId = 'usr_seller',
   isProUser = true,
 }) => {
   const [title, setTitle] = useState('');

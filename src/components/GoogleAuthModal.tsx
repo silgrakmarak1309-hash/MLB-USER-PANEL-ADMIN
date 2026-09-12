@@ -52,12 +52,6 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         ? window.location.origin
         : 'https://ais-dev-mylfdfrzwnyjhipfvcskrq-563394565880.asia-southeast1.run.app';
 
-    const emailToUse = presetEmail || 'merilocalbazaar@gmail.com';
-    const nameToUse = presetName || 'Silgrak Marak';
-    const avatarToUse =
-      presetAvatar ||
-      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
-
     try {
       // If live Supabase client exists and configured, initiate real Google OAuth with dynamic origin redirect
       if (supabase && !presetEmail) {
@@ -75,14 +69,23 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
 
           if (oauthError) {
             console.warn('Supabase OAuth notice:', oauthError.message);
-          } else if (oauthData?.url && !window.location.href.includes('sandbox')) {
-            // In standalone/Vercel browser tabs, navigation happens directly
-            // window.location.href = oauthData.url;
+          } else if (oauthData?.url) {
+            // In standalone/browser tabs, navigation happens directly
+            if (typeof window !== 'undefined') {
+              window.location.href = oauthData.url;
+              return;
+            }
           }
         } catch (oauthEx) {
           console.warn('OAuth redirect notice:', oauthEx);
         }
       }
+
+      const emailToUse = presetEmail || 'user@gmail.com';
+      const nameToUse = presetName || (presetEmail ? presetEmail.split('@')[0] : 'Google User');
+      const avatarToUse =
+        presetAvatar ||
+        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(nameToUse)}&backgroundColor=ea580c,f59e0b,059669`;
 
       // Build UserProfile object
       const userProfile: UserProfile = {
@@ -199,7 +202,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         <div className="space-y-3 pt-1">
           <button
             type="button"
-            onClick={() => handleGoogleSignIn('merilocalbazaar@gmail.com', 'Silgrak Marak')}
+            onClick={() => handleGoogleSignIn()}
             disabled={loading}
             className="w-full py-3.5 px-4 bg-white hover:bg-slate-50 active:scale-[0.99] text-slate-800 rounded-2xl font-black text-sm border-2 border-slate-300 hover:border-slate-400 shadow-md transition-all flex items-center justify-center gap-3 cursor-pointer group"
           >

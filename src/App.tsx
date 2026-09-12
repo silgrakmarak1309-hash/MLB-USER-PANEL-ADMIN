@@ -980,6 +980,95 @@ export function App() {
     }
   };
 
+  // Dynamically Sync Auth User Session & Profile from Supabase
+  const syncAuthUserSession = useCallback(async (sessionUser?: any) => {
+    if (!supabase) return;
+    try {
+      let authUser = sessionUser;
+      if (!authUser) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        authUser = sessionData?.session?.user;
+      }
+
+      if (authUser && authUser.id) {
+        // Query live profile by auth user ID
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        const metadata = authUser.user_metadata || {};
+        const authFullName =
+          metadata.full_name ||
+          metadata.name ||
+          metadata.user_name ||
+          (authUser.email ? authUser.email.split('@')[0] : '');
+
+        const authAvatar =
+          metadata.avatar_url ||
+          metadata.picture ||
+          metadata.avatar ||
+          '';
+
+        const effectiveFullName = profile?.full_name || authFullName || 'Member';
+        const effectiveAvatar = profile?.avatar_url || authAvatar || '';
+        const isUserAdmin =
+          profile?.role === 'admin' ||
+          authUser.email?.includes('admin') ||
+          authUser.email === 'merilocalbazaar@gmail.com' ||
+          authUser.email === 'chiamesangma588@gmail.com';
+
+        const updatedProfile: UserProfile = {
+          id: authUser.id,
+          email: authUser.email || profile?.email || '',
+          full_name: effectiveFullName,
+          avatar_url: effectiveAvatar,
+          phone: profile?.phone || authUser.phone || metadata.phone || '',
+          city: profile?.city || 'Meghalaya',
+          state: profile?.state || 'Meghalaya',
+          district: profile?.district || '',
+          block: profile?.block || '',
+          village: profile?.village || '',
+          permanent_address: profile?.permanent_address || '',
+          role: (profile?.role || (isUserAdmin ? 'admin' : 'user')) as any,
+          is_pro: profile?.is_pro ?? isUserAdmin,
+          pro_status: profile?.pro_status || (isUserAdmin ? 'active' : 'inactive'),
+          pro_expiry: profile?.pro_expiry || (isUserAdmin ? '2030-12-31' : undefined),
+          is_delivery_partner: profile?.is_delivery_partner || false,
+          partner_status: profile?.partner_status || 'none',
+          is_approved_by_admin: profile?.is_approved_by_admin ?? true,
+          driving_license: profile?.driving_license || '',
+          driving_license_no: profile?.driving_license_no || '',
+          driving_license_proof_url: profile?.driving_license_proof_url || '',
+          vehicle_rc_no: profile?.vehicle_rc_no || '',
+          payout_upi_id: profile?.payout_upi_id || '',
+          payout_bank_name: profile?.payout_bank_name || '',
+          payout_account_no: profile?.payout_account_no || '',
+          payout_ifsc_code: profile?.payout_ifsc_code || '',
+          payout_qr_image_url: profile?.payout_qr_image_url || '',
+          created_at: profile?.created_at || new Date().toISOString(),
+        };
+
+        // If profile didn't exist in Supabase DB yet, upsert it
+        if (!profile) {
+          try {
+            await supabase.from('profiles').upsert([updatedProfile]);
+          } catch (upsertErr) {
+            console.warn('Profile sync upsert fallback:', upsertErr);
+          }
+        }
+
+        setCurrentUser(updatedProfile);
+        try {
+          localStorage.setItem('mlb_active_user', JSON.stringify(updatedProfile));
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.warn('Dynamic user profile session sync:', err);
+    }
+  }, []);
+
   const handleLoginSuccess = (user: UserProfile) => {
     setCurrentUser(user);
     try {
@@ -1122,11 +1211,35 @@ export function App() {
 
   useEffect(() => {
     fetchData();
+    // Dynamic Supabase Auth Session & User Profile Sync
+    syncAuthUserSession();
+
+    let authSubscription: { unsubscribe: () => void } | null = null;
+    if (supabase) {
+      const { data } = supabase.auth.onAuthStateChange((event, session) => {
+        if (session?.user) {
+          syncAuthUserSession(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          setCurrentUser(null);
+          try {
+            localStorage.removeItem('mlb_active_user');
+          } catch (_) {}
+        }
+      });
+      authSubscription = data?.subscription || null;
+    }
+
     // Direct Frontend 3-Days Plan Expiry Scan & Automated Alert Dispatch
     checkAndSend3DaysPlanExpiryAlerts().catch((err) => {
       console.warn('Direct plan expiry background check non-blocking notice:', err);
     });
-  }, [fetchData]);
+
+    return () => {
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
+    };
+  }, [fetchData, syncAuthUserSession]);
 
   // Admin Listing Moderation Action
   const handleUpdateListingStatus = async (
@@ -2016,7 +2129,7 @@ export function App() {
               ...o,
               status: 'out_for_delivery',
               delivery_partner_id: currentUser.id,
-              delivery_partner_name: currentUser.full_name || 'Silgrak Marak',
+              delivery_partner_name: currentUser.full_name || 'Delivery Partner',
               delivery_partner_phone: currentUser.phone || '9876543210',
               accepted_at: acceptedTime,
             }
@@ -2031,7 +2144,7 @@ export function App() {
           .update({
             status: 'out_for_delivery',
             delivery_partner_id: currentUser.id,
-            delivery_partner_name: currentUser.full_name || 'Silgrak Marak',
+            delivery_partner_name: currentUser.full_name || 'Delivery Partner',
             delivery_partner_phone: currentUser.phone || '9876543210',
             accepted_at: acceptedTime,
           })
@@ -3161,7 +3274,7 @@ export function App() {
             upiId={upiId}
             qrCodeUrl={qrCodeUrl}
             userEmail={currentUser.email}
-            userName={currentUser.full_name || 'Silgrak Marak'}
+            userName={currentUser.full_name || 'Member'}
             userPhone={currentUser.phone || '9876543210'}
             onSubmitRecharge={handleSubmitRecharge}
             onSuccessReturn={() => setUserActiveTab('marketplace')}
