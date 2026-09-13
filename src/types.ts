@@ -526,6 +526,10 @@ export interface ServiceRegistration extends LocalAddressFields {
   user_name?: string;
   full_name: string;
   phone: string;
+  service_type?: string;
+  vehicle_number?: string;
+  vehicle_type?: string;
+  payout_upi?: string;
   whatsapp?: string;
   category: string;
   experience: string;

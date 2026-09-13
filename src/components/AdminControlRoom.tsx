@@ -152,7 +152,7 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
   >('pending_verification');
   const [rechargeFilter, setRechargeFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [regFilter, setRegFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
-  const [regTypeFilter, setRegTypeFilter] = useState<'all' | 'shops' | 'vehicles'>('all');
+  const [regTypeFilter, setRegTypeFilter] = useState<'all' | 'shops' | 'vehicles' | 'drivers'>('all');
   const [regSearch, setRegSearch] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [inspectDocUrl, setInspectDocUrl] = useState<string | null>(null);
@@ -194,10 +194,16 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
   const pendingRechargesCount = rechargeRequests.filter((r) => r.status === 'pending').length;
   const pendingShopsCount = shopRegistrations.filter((s) => s.status === 'pending').length;
   const pendingVehiclesCount = vehicleRegistrations.filter((v) => v.status === 'pending').length;
-  const totalPendingRegistrations = pendingShopsCount + pendingVehiclesCount;
-  const pendingServicesCount = serviceRegistrations.filter(
-    (s) => !s.is_approved && s.status !== 'rejected'
+  const driverRegistrations = serviceRegistrations.filter(
+    (s) => s.service_type === 'Delivery Partner' || !!s.vehicle_number || !!s.vehicle_type
+  );
+  const pendingDriversCount = driverRegistrations.filter(
+    (s) => !s.is_approved && s.status !== 'approved' && s.status !== 'rejected'
   ).length;
+  const pendingServicesCount = serviceRegistrations.filter(
+    (s) => !s.is_approved && s.status !== 'approved' && s.status !== 'rejected'
+  ).length;
+  const totalPendingRegistrations = pendingShopsCount + pendingVehiclesCount + pendingDriversCount;
   const pendingPayoutsCount = payoutRequests.filter((p) => p.status === 'pending').length;
 
   // Filtered Payout Requests
@@ -293,6 +299,7 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
 
   // Filtered Registrations (Shops & Vehicles)
   const filteredShops = shopRegistrations.filter((s) => {
+    if (regTypeFilter !== 'all' && regTypeFilter !== 'shops') return false;
     if (regFilter !== 'all' && s.status !== regFilter) return false;
     if (regSearch) {
       const q = regSearch.toLowerCase();
@@ -307,6 +314,7 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
   });
 
   const filteredVehicles = vehicleRegistrations.filter((v) => {
+    if (regTypeFilter !== 'all' && regTypeFilter !== 'vehicles') return false;
     if (regFilter !== 'all' && v.status !== regFilter) return false;
     if (regSearch) {
       const q = regSearch.toLowerCase();
@@ -321,6 +329,24 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
         dlNo.includes(q) ||
         phone.includes(q) ||
         model.includes(q)
+      );
+    }
+    return true;
+  });
+
+  const filteredDriverRegistrations = driverRegistrations.filter((s) => {
+    if (regTypeFilter !== 'all' && regTypeFilter !== 'drivers') return false;
+    if (regFilter !== 'all' && s.status !== regFilter) return false;
+    if (regSearch) {
+      const q = regSearch.toLowerCase();
+      return (
+        s.full_name?.toLowerCase().includes(q) ||
+        s.phone?.toLowerCase().includes(q) ||
+        s.service_type?.toLowerCase().includes(q) ||
+        s.vehicle_number?.toLowerCase().includes(q) ||
+        s.vehicle_type?.toLowerCase().includes(q) ||
+        s.payout_upi?.toLowerCase().includes(q) ||
+        s.payout_upi_id?.toLowerCase().includes(q)
       );
     }
     return true;
@@ -465,7 +491,7 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
                 <span>2. Regs</span>
               </div>
               <div className="text-[11px] opacity-80 mt-0.5">
-                {shopRegistrations.length + vehicleRegistrations.length} Shops
+                {shopRegistrations.length + vehicleRegistrations.length + driverRegistrations.length} Applications
               </div>
             </div>
             {totalPendingRegistrations > 0 && (
@@ -972,17 +998,17 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: SHOPS & VEHICLE REGISTRATIONS */}
+      {/* TAB 2: SHOPS, VEHICLE & DRIVER REGISTRATIONS */}
       {/* ========================================================================= */}
       {adminTab === 'registrations' && (
         <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-lg font-black text-slate-900">
-                Business & Fleet Verification Requests
+                Business, Fleet & Driver Verification Requests
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Inspect Shop Trade Licenses, GSTIN, and Driver Driving Licenses (DL & RC).
+                Inspect shop registrations, fleet requests, and delivery partner applications.
               </p>
             </div>
 
@@ -996,7 +1022,7 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  All ({shopRegistrations.length + vehicleRegistrations.length})
+                  All ({shopRegistrations.length + vehicleRegistrations.length + driverRegistrations.length})
                 </button>
                 <button
                   onClick={() => setRegTypeFilter('shops')}
@@ -1017,6 +1043,16 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
                   }`}
                 >
                   Vehicles ({vehicleRegistrations.length})
+                </button>
+                <button
+                  onClick={() => setRegTypeFilter('drivers')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    regTypeFilter === 'drivers'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Drivers ({driverRegistrations.length})
                 </button>
               </div>
             </div>
@@ -1224,6 +1260,99 @@ export const AdminControlRoom: React.FC<AdminControlRoomProps> = ({
                 </div>
               </div>
             ))}
+
+            {filteredDriverRegistrations.map((driver) => {
+              const isApproved = driver.is_approved || driver.status === 'approved';
+              const isRejected = driver.status === 'rejected';
+              return (
+                <div
+                  key={driver.id}
+                  className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 transition"
+                >
+                  <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900 text-base">
+                          {driver.full_name || 'Delivery Partner'}
+                        </span>
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          Driver: {driver.service_type || 'Delivery Partner'}
+                        </span>
+                        <span
+                          className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            isApproved
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isRejected
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {driver.status}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-600 pt-1">
+                        <div>
+                          <strong>Phone:</strong> {driver.phone || 'N/A'}
+                        </div>
+                        <div>
+                          <strong>Vehicle:</strong>{' '}
+                          <span className="font-mono text-slate-800 font-bold">
+                            {driver.vehicle_type || 'N/A'} ({driver.vehicle_number || 'N/A'})
+                          </span>
+                        </div>
+                        <div>
+                          <strong>Payout UPI:</strong>{' '}
+                          <span className="font-mono text-emerald-700 font-bold">
+                            {driver.payout_upi || driver.payout_upi_id || 'N/A'}
+                          </span>
+                        </div>
+                        <div>
+                          <strong>Submitted:</strong>{' '}
+                          {new Date(driver.created_at).toLocaleString('en-IN', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <button
+                      onClick={() => onApproveServiceRegistration?.(driver.id)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1 shadow-xs ${
+                        isApproved
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {isApproved ? 'Approved' : 'Approve Driver'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const reason = window.prompt(
+                          'Please enter reason for rejection (optional):',
+                          'Driver details could not be verified.'
+                        );
+                        if (reason !== null) {
+                          onRejectServiceRegistration?.(driver.id, reason);
+                        }
+                      }}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1 ${
+                        isRejected
+                          ? 'bg-red-100 text-red-800 border border-red-300'
+                          : 'bg-red-600 hover:bg-red-700 text-white'
+                      }`}
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      {isRejected ? 'Rejected' : 'Reject Driver'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

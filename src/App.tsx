@@ -1093,12 +1093,14 @@ export function App() {
       }
 
       // 6.5. Local Services & Jobs Registrations
-      const { data: servicesData } = await supabase
+      const { data: servicesData, error: servicesError } = await supabase
         .from('service_registrations')
         .select('*')
         .order('created_at', { ascending: false });
-      if (servicesData && servicesData.length > 0) {
-        setServiceRegistrations(servicesData);
+      if (servicesError) {
+        console.error('Supabase service registrations fetch:', servicesError);
+      } else {
+        setServiceRegistrations(servicesData || []);
       }
 
       // 7. Delivery Orders
@@ -1997,31 +1999,34 @@ export function App() {
       return [updatedProfile, ...prev];
     });
 
-    // Also register in vehicle_registrations so it immediately reflects in Partner Hub Tab 2 & Tab 4
-    const newVehReg: VehicleRegistration = {
-      id: `veh_${currentUser.id}`,
+    // Register delivery applications in service_registrations so Admin Control Room
+    // can review the exact application submitted by the driver.
+    const newServiceReg: ServiceRegistration = {
+      id: `srv_${Date.now()}`,
       user_id: currentUser.id,
-      driver_name: data.fullName || currentUser.full_name || 'Delivery Partner',
-      driver_phone: data.phone || currentUser.phone || 'N/A',
-      vehicle_type: data.vehicleType || 'Bike',
-      vehicle_model: data.vehicleType || 'Bike',
+      full_name: data.fullName || currentUser.full_name || 'Delivery Partner',
+      phone: data.phone || currentUser.phone || 'N/A',
+      service_type: 'Delivery Partner',
+      category: 'Delivery Partner',
+      experience: 'Delivery driver',
       vehicle_number: data.vehicleNumber || 'N/A',
-      driving_license_no: data.drivingLicenseNo || '',
-      driving_license_proof_url: data.drivingLicenseProofUrl || '',
-      operational_route: `${data.village ? data.village + ', ' : ''}${data.district || 'West Garo Hills'}`,
+      vehicle_type: data.vehicleType || 'Bike',
+      payout_upi: data.payoutUpiId || '',
       payout_upi_id: data.payoutUpiId || '',
+      state: data.state,
+      district: data.district,
+      block: data.block,
+      village: data.village,
+      is_approved: false,
       status: 'pending',
       created_at: new Date().toISOString(),
     };
 
-    setVehicleRegistrations((prev) => [
-      newVehReg,
-      ...prev.filter((v) => v.user_id !== currentUser.id && v.id !== newVehReg.id),
-    ]);
+    setServiceRegistrations((prev) => [newServiceReg, ...prev]);
 
     if (supabase) {
       try {
-        await supabase.from('profiles').upsert([
+        const { error: profileError } = await supabase.from('profiles').upsert([
           {
             id: currentUser.id,
             email: currentUser.email,
@@ -2047,10 +2052,29 @@ export function App() {
             role: currentUser.role === 'user' ? 'delivery_partner' : currentUser.role,
           },
         ]);
+        if (profileError) throw profileError;
 
-        await supabase.from('vehicle_registrations').upsert([newVehReg]);
+        const { error: registrationError } = await supabase
+          .from('service_registrations')
+          .insert([
+            {
+              id: newServiceReg.id,
+              user_id: currentUser.id,
+              full_name: newServiceReg.full_name,
+              phone: newServiceReg.phone,
+              service_type: newServiceReg.service_type,
+              vehicle_number: newServiceReg.vehicle_number,
+              vehicle_type: newServiceReg.vehicle_type,
+              payout_upi: newServiceReg.payout_upi,
+              status: 'pending',
+              is_approved: false,
+              created_at: newServiceReg.created_at,
+            },
+          ]);
+        if (registrationError) throw registrationError;
       } catch (e) {
         console.error('Supabase delivery partner registration sync:', e);
+        throw e;
       }
     }
   };
