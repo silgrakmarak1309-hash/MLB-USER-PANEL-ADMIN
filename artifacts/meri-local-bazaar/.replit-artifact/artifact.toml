@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Meri Local Bazaar"
+description = "A verified local marketplace for Meghalaya communities, connecting buyers, sellers, delivery partners, and local service providers in one app."
+version = "1.0.0"
+id = "artifacts/meri-local-bazaar"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20630
+
+[services.development]
+run = "pnpm --filter @workspace/meri-local-bazaar run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/meri-local-bazaar", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/meri-local-bazaar/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20630"
+BASE_PATH = "/"

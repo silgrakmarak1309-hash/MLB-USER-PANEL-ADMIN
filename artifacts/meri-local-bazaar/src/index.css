@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+:root {
+  --background: 39 45% 97%;
+  --foreground: 224 48% 16%;
+  --card: 0 0% 100%;
+  --card-foreground: 224 48% 16%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 48% 16%;
+  --primary: 25 97% 51%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 138 74% 31%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 39 32% 91%;
+  --muted-foreground: 222 20% 42%;
+  --accent: 49 91% 58%;
+  --accent-foreground: 224 48% 16%;
+  --destructive: 0 70% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 39 22% 84%;
+  --input: 39 22% 84%;
+  --ring: 25 97% 51%;
+  --radius: 0.75rem;
+  --brand-orange: #ff7900;
+  --brand-green: #138a20;
+  --brand-ink: #172554;
+  --brand-cream: #fffaf0;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dark {
+  --background: 224 48% 11%;
+  --foreground: 39 45% 97%;
+  --card: 224 41% 16%;
+  --card-foreground: 39 45% 97%;
+  --popover: 224 41% 16%;
+  --popover-foreground: 39 45% 97%;
+  --primary: 25 97% 56%;
+  --primary-foreground: 224 48% 11%;
+  --secondary: 138 58% 38%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 224 29% 23%;
+  --muted-foreground: 39 18% 73%;
+  --accent: 49 82% 55%;
+  --accent-foreground: 224 48% 11%;
+  --border: 224 25% 29%;
+  --input: 224 25% 29%;
+  --ring: 25 97% 56%;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: hsl(var(--border));
+  }
+
+  html {
+    background: var(--brand-cream);
+  }
+
+  body {
+    min-width: 320px;
+    margin: 0;
+    background:
+      radial-gradient(circle at 0 0, rgba(255, 121, 0, 0.06), transparent 28rem),
+      var(--brand-cream);
+    color: hsl(var(--foreground));
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  input,
+  textarea,
+  select {
+    color: #172554 !important;
+    background-color: #fffdfa;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #8790a5 !important;
+    opacity: 1;
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    color: #172554 !important;
+    background-color: #fffdfa !important;
+  }
+
+  ::selection {
+    background: rgba(255, 121, 0, 0.22);
+    color: #172554;
+  }
+}
+
+@layer utilities {
+  .text-brand-ink {
+    color: var(--brand-ink);
+  }
+
+  .bg-brand-cream {
+    background-color: var(--brand-cream);
+  }
+}
